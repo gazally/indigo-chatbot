@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<PluginConfig>
+	<SupportURL>http://github.com/gazally/chatbot-indigo-plugin</SupportURL>
+	<Field id="info" type="label">
+		<Label>Chatbot Plugin</Label>
+	</Field>
+	<Field id="sep" type="separator"/>
+	<Field id="brainPath" type="textfield">
+	  <Label>Location of chatbot script files:</Label>
+	</Field>
+	<Field id="sep2" type="separator"/>
+	<Field id="showDebugInfo" type="checkbox" defaultValue="false">
+		<Label>Enable debugging:</Label>
+		<Description>(not recommended)</Description>
+	</Field>
+</PluginConfig>

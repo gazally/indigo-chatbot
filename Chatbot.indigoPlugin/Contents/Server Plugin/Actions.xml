@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<Actions>
+  <Action id="respondToMessage">
+    <Name>Respond to a Chat Message</Name>
+    <CallbackMethod>respondToMessage</CallbackMethod>
+    <ConfigUI>
+      <Field id="message" type="textfield" default="">
+	<Label>Message:</Label>
+      </Field>
+      <Field id = "sep1" type = "separator"/>
+      <Field id = "explanation1" type="label">
+	<Label>In the "Message" field above, you can insert device substitution markup which will substitute a variable value just before the action is run. Simply insert %%v:VARIABLEID%% anywhere in the text as many times as you want. VARIABLEID is the variable's numeric id as found in the Variable List window. Likewise, you can substitute device state values by inserting %%d:DEVICEID:STATEKEY%% where DEVICEID is the device's numeric identifier and STATEKEY is the state identifier as found in the documentation for built-in devices and in the Custom States tile in the control area of the Home screen for custom plugin devices (which you may have to scroll the bottom panel of the Home screen to see). </Label>
+      </Field>
+      <Field id = "sep2" type = "separator"/>
+      <Field id="device" type="textfield" default="">
+	<Label>Device:</Label>
+      </Field>
+      <Field id="send_method" type="textfield" default="">
+	<Label>Callback Method:</Label>
+      </Field>
+      <Field id="message_field" type="textfield" default="">
+	<Label>Field Name:</Label>
+      </Field>
+      <Field id="sep3" type="separator"/>     
+      <Field id = "explanation2" type="label">
+	<Label>The chatbot can send its response to this message to a plugin-defined device with an associated action. See the documentation for the plugin you are using to send messages to find out the name of its callback method for sending a message, and the name of the field where the callback method expects to find the message.</Label>
+      </Field>
+    </ConfigUI>
+  </Action>
+</Actions>
