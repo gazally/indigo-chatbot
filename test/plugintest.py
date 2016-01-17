@@ -3,100 +3,35 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+from __future__ import print_function
+from __future__ import unicode_literals
+
 import sys, os
 import unittest
+
 import mock
+
 from unittest import TestCase
 from mock import patch, Mock, MagicMock
 from threading import Thread
 
-sys.path.append(os.path.abspath('../Chatbot/Contents/Server Plugin'))
+sys.path.append(os.path.abspath('../Chatbot.indigoPlugin/Contents/Server Plugin'))
 
-class PluginBaseForTest:
-    _verbose = False
-    
+class PluginBaseForTest(object):
     def __init__(self, pid, name, version, prefs):
-        pass
-    def __del__(self):
-        pass
-    def sleep(self):
-        pass
-    def substitute(self, string, validateOnly=True):
-        if validateOnly:
-            return (True, string)
-        else:
-            return string
-    def debugLog(self, string):
-        print "debugLog"
-        if PluginBaseForTest._verbose:
-            print string
-    def errorLog(self, string):
-        if PluginBaseForTest._verbose:
-            print string
+        self.pluginPrefs = prefs
 
-
-class DeviceForTest:
-    def __init__(self, dev_id, name, props):
-        self.id = dev_id
-        self.name = name
-        self.pluginProps = props
-        self.states = {}
-    def updateStateOnServer(self, key=None, value=None, clearErrorState=True):
-        assert key != None
-        assert value != None
-        self.states[key] = value
-    def replacePluginPropsOnServer(self, props):
-        self.props = props
-
-def printstr(s):
-    print s
     
-class InteractivePlugin(object):
-    def __init__(self, path, python=False):
-        PluginBaseForTest._verbose = True
-        
-        self.indigo_mock = Mock()
-        self.indigo_mock.PluginBase = PluginBaseForTest
-        self.indigo_mock.PluginBase.pluginPrefs = {u"showDebugInfo" : True}
-        self.indigo_mock.Dict = Mock(return_value={}.copy())
-        self.indigo_mock.variables = MagicMock()
-        
-        modules = sys.modules.copy()
-        modules["indigo"] = self.indigo_mock
-        self.module_patcher = patch.dict("sys.modules", modules)
-        self.module_patcher.start()
-        import plugin
-
-        self.plugin_module = plugin
-        self.plugin_module.indigo.PluginBase = PluginBaseForTest
-        if path == "":
-            path = "./brain"
-            
-        self.plugin = self.plugin_module.Plugin("What's", "here", "doesn't matter",
-                                           {u"showDebugInfo" : True,
-                                            u"brainPath": path})
-
-    def __del(self):
-        self.module_patcher.stop()
-                
-    def messageLoop(self):
-        action = Mock()
-        action.deviceId = None
-        action.props = {"send_method":None, "message_field":None}
-
-        while True:
-            msg = raw_input("You> ")
-            if msg == '/quit':
-                return
-            action.props[u"message"] = msg
-            self.plugin.respondToMessage(action)
+def substitute(self, string, validateOnly=True):
+    if validateOnly:
+        return (True, string)
+    else:
+        return string
 
         
-
 class PluginTestCase(TestCase):
-
     def setUp(self):
-        self.indigo_mock = Mock()
+        self.indigo_mock = MagicMock()
         self.indigo_mock.PluginBase = PluginBaseForTest
         self.indigo_mock.PluginBase.pluginPrefs = {u"showDebugInfo" : False}
         self.indigo_mock.Dict = Mock(return_value={}.copy())
@@ -106,25 +41,45 @@ class PluginTestCase(TestCase):
         self.module_patcher = patch.dict("sys.modules", modules)
         self.module_patcher.start()
         import plugin
-
         self.plugin_module = plugin
         self.plugin_module.indigo.PluginBase = PluginBaseForTest
+        
+        PluginBaseForTest.debugLog = Mock()
+        PluginBaseForTest.errorLog = Mock()
+        PluginBaseForTest.sleep = Mock()
+        PluginBaseForTest.substitute = substitute
 
         self.plugin = self.new_plugin()
-        
+
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def tearDown(self):
         self.module_patcher.stop()
 
-    def new_plugin(self):
+    def new_plugin(self, path="./test_scripts"):
         # Before I created this little function,
         # python was giving me a bizillion "NoneType object has no
         # attribute" warnings, I think because tearDown is called,
         # removing the base class, before the plugin objects are deleted.
         # why this fixed it is a mystery to me
-        return self.plugin_module.Plugin("What's", "here", "doesn't matter",
-                                           {u"showDebugInfo" : False,
-                                            u"brainPath": "./brain"})
+        props = {u"showDebugInfo" : False,
+                 u"scriptsPath": path}
+        plugin = self.plugin_module.Plugin("What's", "here", "doesn't matter",
+                                         props)
+        plugin.startup()
+        return plugin
+
+    def test_Startup_LogsError_OnNonexistantLoadPath(self):
+        self.new_plugin(path="./doesnt_exist")
+        self.assertTrue(PluginBaseForTest.errorLog.called)
+
+    def test_Startup_LogsError_OnEmptyLoadPath(self):
+        self.new_plugin(path="./empty_directory")
+        self.assertTrue(PluginBaseForTest.errorLog.called)
+
+    def test_Startup_LogsError_OnBadPyFileInLoadPath(self):
+        self.new_plugin(path="./syntax_error")
+        self.assertTrue(PluginBaseForTest.errorLog.called)
 
     def test_Startup_Succeeds(self):
         self.plugin.startup()
@@ -160,33 +115,114 @@ class PluginTestCase(TestCase):
         self.assertFalse(self.plugin.debug)
              
     def test_PreferencesUIValidation_Succeeds(self):
-        values = {}
+        values = {"showDebugInfo" : True}
+        ok, d = self.plugin.validatePrefsConfigUi(values)
+        self.assertTrue(ok)
+        values = {"showDebugInfo" : False}
         ok, d = self.plugin.validatePrefsConfigUi(values)
         self.assertTrue(ok)
 
+    def test_deviceListGenerator_Succeeds_OnValidInput(self):
+        dev = Mock()
+        dev.id = 1
+        dev.name = "dev"
+        dev.protocol = self.indigo_mock.kProtocol.Plugin = "foo"
+        self.indigo_mock.devices = [dev]
+        results = self.plugin.deviceListGenerator()
+        self.assertEqual(len(results), 2)
+
     def test_ActionUIValidation_Succeeds_OnValidInput(self):
-        values = {u"message":u"Hi"}
-        tup = self.plugin.validateActionConfigUi(values, 0, 0)
+        values = {u"message":u"Hi", "send_method":"send",
+                  "message_field":"msg", "fieldvalue1":"",
+                  "fieldname1":"", "fieldname2":"",
+                  "fieldvalue2":""}
+        tup = self.plugin.validateActionConfigUi(values, "", 1)
         self.assertEqual(len(tup), 2)
         ok, val = tup
         self.assertTrue(ok)
 
     def test_ActionUIValidation_Fails_OnEmptyMessage(self):
-        values = {u"message":""}
-        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 0)
+        values = {u"message":u"", "send_method":"send",
+                  "message_field":"mess", "fieldvalue1":"fv1",
+                  "fieldname1":"fn1", "fieldname2":"fn2",
+                  "fieldvalue2":"fv2"}
+        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
         self.asserts_for_UIValidation_Failure("message", tup)
 
     def test_ActionUIValidation_Fails_OnNoMessage(self):
-        values = {"":"whatever"}
-        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 0)
+        values = {u"send_method":"send",
+                  "message_field":"mess", "fieldvalue1":"fv1",
+                  "fieldname1":"fn1", "fieldname2":"fn2",
+                  "fieldvalue2":"fv2"}
+        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
         self.asserts_for_UIValidation_Failure("message", tup)
 
     def test_ActionUIValidation_Fails_OnMissingCallbackInfo(self):
-        values = {"message":"Hi", "device":1}
-        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 0)
+        values = {u"message":u"Hi", "send_method":"",
+                  "message_field":"", "fieldvalue1":"fv1",
+                  "fieldname1":"fn1", "fieldname2":"fn2",
+                  "fieldvalue2":"fv2"}
+        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
         self.asserts_for_UIValidation_Failure("send_method", tup)
         self.asserts_for_UIValidation_Failure("message_field", tup)
-        
+
+    def test_ActionUIValidation_Fails_OnMissingFieldName(self):
+        values = {u"message":u"Hi", "send_method":"",
+                  "message_field":"", "fieldvalue1":"fv1",
+                  "fieldname1":"fn1", "fieldname2":"",
+                  "fieldvalue2":"fv2"}
+        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
+        self.asserts_for_UIValidation_Failure("fieldname2", tup)
+
+    def test_ActionUIValidation_Fails_OnFailedSubstitutionCheck(self):
+        values = {u"message":u"Hi", "send_method":"send",
+                  "message_field":"mess", "fieldvalue1":"fv1",
+                  "fieldname1":"fn1", "fieldname2":"fn2",
+                  "fieldvalue2":"fv2"}
+        fail_on = ""
+        def sub(self, string, validateOnly):
+            if validateOnly:
+                return (string != values[fail_on], string)
+        PluginBaseForTest.substitute = sub
+        fail_on = "message"
+        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
+        self.asserts_for_UIValidation_Failure("message", tup)
+
+        fail_on = "fieldvalue2"
+        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
+        self.asserts_for_UIValidation_Failure("fieldvalue2", tup)
+
+    def test_respond_LogsError_OnEmptyMessage(self):
+        action = Mock()
+        action.props = {"message":""}
+        self.plugin.respondToMessage(action)
+        self.assertTrue(PluginBaseForTest.errorLog.called)
+
+    def test_respond_LogsError_OnUnconfiguredAction(self):
+        action = Mock()
+        action.props = {"message": "test", "device": 1}
+        self.plugin.respondToMessage(action)
+        self.assertTrue(PluginBaseForTest.errorLog.called)        
+
+    def test_respond_Succeeds_WithNoReturnAddress(self):
+        action = Mock()
+        action.props = {"message": "test", "device": 0}
+        self.plugin.respondToMessage(action)
+
+    def test_respond_Succeeds_OnValidInput(self):
+        action = Mock()
+        action.props = {"message": "test", "message_field":"m",
+                        "device" : 1, "send_method": "send",
+                        "fieldname1": "f1", "fieldvalue1":"v1",
+                        "fieldname2": "f2", "fieldvalue2":"v2"}
+        m = Mock()
+        m.protocol = self.indigo_mock.kProtocol.Plugin = "protocol"
+        m.isEnabled.return_value = True
+        self.indigo_mock.devices.__contains__.return_value = True
+        self.indigo_mock.devices.__getitem__.return_value = m
+        self.indigo_mock.server.getPlugin.return_value = m
+        self.plugin.respondToMessage(action)
+
     def asserts_for_UIValidation_Failure(self, tag, tup):
         self.assertEqual(len(tup), 3)
         ok, val, errs = tup
@@ -198,11 +234,3 @@ class PluginTestCase(TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-def interact(path=""):
-    ip = InteractivePlugin(path)
-    ip.messageLoop()
-    
-
-     
-    

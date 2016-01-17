@@ -1,29 +1,60 @@
 <?xml version="1.0"?>
 <Actions>
   <Action id="respondToMessage">
-    <Name>Respond to a Chat Message</Name>
+    <Name>Respond to a Message</Name>
     <CallbackMethod>respondToMessage</CallbackMethod>
     <ConfigUI>
+      <Field id="header0" type="label">
+	<Label>Ask the Chatbot for a response to:</Label>
+      </Field>
       <Field id="message" type="textfield" default="">
 	<Label>Message:</Label>
       </Field>
-      <Field id = "sep1" type = "separator"/>
-      <Field id = "explanation1" type="label">
-	<Label>In the "Message" field above, you can insert device substitution markup which will substitute a variable value just before the action is run. Simply insert %%v:VARIABLEID%% anywhere in the text as many times as you want. VARIABLEID is the variable's numeric id as found in the Variable List window. Likewise, you can substitute device state values by inserting %%d:DEVICEID:STATEKEY%% where DEVICEID is the device's numeric identifier and STATEKEY is the state identifier as found in the documentation for built-in devices and in the Custom States tile in the control area of the Home screen for custom plugin devices (which you may have to scroll the bottom panel of the Home screen to see). </Label>
+      <Field id="sep1" type="separator"/>
+      <Field id="header1" type="label">
+	<Label>Plugin-created device to send the response with:</Label>
       </Field>
-      <Field id = "sep2" type = "separator"/>
-      <Field id="device" type="textfield" default="">
+      <Field id="device" type="menu">
 	<Label>Device:</Label>
+	<List class="self" filter="" method="deviceListGenerator"/>
+      </Field>
+      <Field id="header2" type="label">
+	<Label>Name of action defined by the other plugin:</Label>
       </Field>
       <Field id="send_method" type="textfield" default="">
-	<Label>Callback Method:</Label>
+	<Label>Action:</Label>
+      </Field>
+      <Field id="header3" type="label">
+	<Label>What does the other plugin call the message?</Label>
       </Field>
       <Field id="message_field" type="textfield" default="">
-	<Label>Field Name:</Label>
+	<Label>Message Property Name:</Label>
       </Field>
-      <Field id="sep3" type="separator"/>     
-      <Field id = "explanation2" type="label">
-	<Label>The chatbot can send its response to this message to a plugin-defined device with an associated action. See the documentation for the plugin you are using to send messages to find out the name of its callback method for sending a message, and the name of the field where the callback method expects to find the message.</Label>
+      <Field id="sep2" type="separator"/>
+      <Field id="header4" type="label">
+	<Label>How does the other plugin address the recipient?</Label>
+      </Field>
+      <Field id="fieldname1" type="textfield" default="">
+	<Label>First Property Name:</Label>
+      </Field>
+      <Field id="fieldvalue1" type="textfield" default="">
+	<Label>First Property Value:</Label>
+      </Field>
+      <Field id="fieldname2" type="textfield" default="">
+	<Label>Second Property Name:</Label>
+      </Field>
+      <Field id="fieldvalue2" type="textfield" default="">
+	<Label>Second Property Value:</Label>
+      </Field>
+      <Field id="sep3" type="separator"/>
+      <Field id="explanation2" type="label">
+	<Label>You may one or both properties blank if the plugin you are using doesn't require them.</Label>
+      </Field>
+      <Field id = "explanation1" type="label">
+	<Label>Variable and device substitution markup (%%v:VARIABLEID%% and  %%d:DEVICEID:STATEKEY%%) work in the message and property value fields.</Label>
+      </Field>
+      <Field id="actionVersion" type="textfield" hidden="true" defaultValue="0.1">
+	<Label>Hidden action version</Label>
       </Field>
     </ConfigUI>
   </Action>

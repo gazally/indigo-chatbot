@@ -1,0 +1,79 @@
+Help on module patterns:
+
+NAME
+    patterns
+
+FILE
+    /Users/gemini/Projects/Python/Chatbot/Chatbot.indigoPlugin/Contents/Server Plugin/chatbot_reply/patterns.py
+
+DESCRIPTION
+    Pattern Parsing for chatbot_reply. Translates simplified regular
+    expressions, called "patterns" herein, into real regular
+    expressions. The strings that the real regular expressions will
+    be matched against will be called "targets".
+    
+    Components of a pattern:
+    
+    Wildcards:
+        *       match one or more words containing alphanumerics and
+                the underscore
+        @       match one or more words containing only alphabetic 
+                characters, not including underscore
+        $       match one or more numbers containing only digits
+    
+             All three wildcard characters by themselves will match one or more 
+        words/numbers. They may all be modified by numbers representing a 
+        minimum and/or maximum number of words to match:
+    
+        *2~     two or more
+        *~10    one to ten
+        *3~5    three to five
+    
+        If you want to match zero to two words, do this: [*~2]. See Optionals 
+    below.
+    
+    Spaces:
+        One or more whitespace characters in the pattern match one or more 
+        whitespace characters in the target.
+    
+    Words:
+        Words to be matched may contain alphanumerics and the underscore,
+        but may not begin with an underscore.
+    
+    Variables:
+        %a:varname
+        %b:varname
+        %u:varname
+    
+        During regular expression construction, ParseTree.regex() will
+        look up variable values in 
+        a dictionary passed into it and substitute them into the regular
+        expression it is constructing. Variable names may contain 
+        alphanumerics including the underscore but may not begin with 
+        a number or an underscore. Case in variable names is ignored.
+        Variable values must be unicode strings, and will be parsed
+        as even more simplified regular expression patterns, which may only
+        contain Spaces, Words, Optionals, Alternates and Pipes.
+    
+    Optionals, Alternates and Pipes:
+        Any of the above expressions may be grouped together within 
+        parentheses or square brackets, or a list of expressions separated
+        by "|" characters may be placed within parentheses or square brackets.
+        Text within parentheses is required and within square brackets is 
+        optional. So:
+    
+        (this|that)   will match either the string "this" or "that"
+        [this|that]   will match either the empty string, "this", or "that"
+        (thing [one|two])  will match "thing", "thing one" and "thing two"
+    
+    Memorization:
+        Any wildcard, variable, or optional or alternate expression preceded
+        by an underscore will be made into a named group in the regular 
+        expression. They will be given the names "match0" through "matchn"
+        in the order they are encountered in the pattern from left to right.
+        For example:
+    
+        my name is _@ [_@]   will match "My name is Fred" and 
+                             "My name is Fred Flintstone". The re.match
+                             groupdict will contain "match0" and "match1",
+                             and m.groupdict()["match1"] might be None.
