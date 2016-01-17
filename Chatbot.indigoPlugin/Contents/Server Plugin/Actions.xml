@@ -28,27 +28,27 @@
 	<Label>What does the other plugin call the message?</Label>
       </Field>
       <Field id="message_field" type="textfield" default="">
-	<Label>Message Property Name:</Label>
+	<Label>Property Name:</Label>
       </Field>
       <Field id="sep2" type="separator"/>
       <Field id="header4" type="label">
 	<Label>How does the other plugin address the recipient?</Label>
       </Field>
       <Field id="fieldname1" type="textfield" default="">
-	<Label>First Property Name:</Label>
+	<Label>Property Name 1:</Label>
       </Field>
       <Field id="fieldvalue1" type="textfield" default="">
-	<Label>First Property Value:</Label>
+	<Label>Property Value 1:</Label>
       </Field>
       <Field id="fieldname2" type="textfield" default="">
-	<Label>Second Property Name:</Label>
+	<Label>Property Name 2:</Label>
       </Field>
       <Field id="fieldvalue2" type="textfield" default="">
-	<Label>Second Property Value:</Label>
+	<Label>Property Value 2:</Label>
       </Field>
       <Field id="sep3" type="separator"/>
       <Field id="explanation2" type="label">
-	<Label>You may one or both properties blank if the plugin you are using doesn't require them.</Label>
+	<Label>You may leave one or both properties blank if the plugin you are using doesn't require them.</Label>
       </Field>
       <Field id = "explanation1" type="label">
 	<Label>Variable and device substitution markup (%%v:VARIABLEID%% and  %%d:DEVICEID:STATEKEY%%) work in the message and property value fields.</Label>

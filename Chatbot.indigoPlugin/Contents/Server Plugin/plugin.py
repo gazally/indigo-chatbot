@@ -138,9 +138,10 @@ class Plugin(indigo.PluginBase):
             return (True, values)
 
     def validate_substitution(self, values, errors, field):
-        valid, msg = self.substitute(values[field], validateOnly=True)
+        tup = self.substitute(values[field], validateOnly=True)
+        valid = tup[0]
         if not valid:
-            errors[field] = msg
+            errors[field] = tup[1]
 
     def validate_field(self, values, errors, num):
         if values["fieldvalue" + num]:
