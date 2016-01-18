@@ -7,6 +7,9 @@
 	<Field id="scriptsPath" type="textfield">
 	  <Label>Directory/Folder name:</Label>
 	</Field>
+	<Field id="help" type="label">
+	  <Label>If you find your script folder in the Finder, you can drag and drop it above.</Label>
+	</Field>
 	<Field id="sep2" type="separator"/>
 	<Field id="showDebugInfo" type="checkbox" defaultValue="false">
 		<Label>Enable debugging:</Label>

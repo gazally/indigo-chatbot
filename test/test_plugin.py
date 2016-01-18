@@ -28,13 +28,14 @@ def substitute(self, string, validateOnly=True):
     else:
         return string
 
-        
-class PluginTestCase(TestCase):
+class IndigoMockTestCase(TestCase):
     def setUp(self):
+        class JustLike_dict(dict):
+            """ make it so type(indigo.Dict()) != dict """
+            pass
         self.indigo_mock = MagicMock()
+        self.indigo_mock.Dict = JustLike_dict
         self.indigo_mock.PluginBase = PluginBaseForTest
-        self.indigo_mock.PluginBase.pluginPrefs = {u"showDebugInfo" : False}
-        self.indigo_mock.Dict = Mock(return_value={}.copy())
 
         modules = sys.modules.copy()
         modules["indigo"] = self.indigo_mock
@@ -43,18 +44,24 @@ class PluginTestCase(TestCase):
         import plugin
         self.plugin_module = plugin
         self.plugin_module.indigo.PluginBase = PluginBaseForTest
+
+    def tearDown(self):
+        self.module_patcher.stop()
         
+class PluginTestCase(IndigoMockTestCase):
+    def setUp(self):
+        IndigoMockTestCase.setUp(self)
+        PluginBaseForTest.pluginPrefs = {u"showDebugInfo" : False}
         PluginBaseForTest.debugLog = Mock()
         PluginBaseForTest.errorLog = Mock()
         PluginBaseForTest.sleep = Mock()
         PluginBaseForTest.substitute = substitute
 
         self.plugin = self.new_plugin()
-
         self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def tearDown(self):
-        self.module_patcher.stop()
+        IndigoMockTestCase.tearDown(self)
 
     def new_plugin(self, path="./test_scripts"):
         # Before I created this little function,
@@ -198,20 +205,43 @@ class PluginTestCase(TestCase):
         self.plugin.respondToMessage(action)
         self.assertTrue(PluginBaseForTest.errorLog.called)
 
-    def test_respond_LogsError_OnUnconfiguredAction(self):
+    def test_respond_LogsError_OnBadDevice(self):
         action = Mock()
-        action.props = {"message": "test", "device": 1}
+        action.props = {"message": "status", "message_field":"m",
+                        "device" : 1, "send_method": "send",
+                        "fieldname1": "f1", "fieldvalue1":"v1",
+                        "fieldname2": "f2", "fieldvalue2":"v2"}
+        m = Mock()
+        m.protocol = "protocol"
+        self.indigo_mock.kProtocol.Plugin = "something else"
+        m.isEnabled.return_value = True
+        self.indigo_mock.devices.__contains__.return_value = True
+        self.indigo_mock.devices.__getitem__.return_value = m
+        self.indigo_mock.server.getPlugin.return_value = m
         self.plugin.respondToMessage(action)
-        self.assertTrue(PluginBaseForTest.errorLog.called)        
+
+    def test_respond_LogsError_OnDisabledPlugin(self):
+        action = Mock()
+        action.props = {"message": "status", "message_field":"m",
+                        "device" : 1, "send_method": "send",
+                        "fieldname1": "f1", "fieldvalue1":"v1",
+                        "fieldname2": "f2", "fieldvalue2":"v2"}
+        m = Mock()
+        m.protocol = self.indigo_mock.kProtocol.Plugin = "protocol"
+        m.isEnabled.return_value = False
+        self.indigo_mock.devices.__contains__.return_value = True
+        self.indigo_mock.devices.__getitem__.return_value = m
+        self.indigo_mock.server.getPlugin.return_value = m
+        self.plugin.respondToMessage(action)
 
     def test_respond_Succeeds_WithNoReturnAddress(self):
         action = Mock()
-        action.props = {"message": "test", "device": 0}
+        action.props = {"message": "status", "device": 0}
         self.plugin.respondToMessage(action)
 
     def test_respond_Succeeds_OnValidInput(self):
         action = Mock()
-        action.props = {"message": "test", "message_field":"m",
+        action.props = {"message": "status", "message_field":"m",
                         "device" : 1, "send_method": "send",
                         "fieldname1": "f1", "fieldvalue1":"v1",
                         "fieldname2": "f2", "fieldvalue2":"v2"}
@@ -231,6 +261,44 @@ class PluginTestCase(TestCase):
             self.assertTrue(tag in errs)
             self.assertTrue(errs[tag])
 
+class ReturnAddressTestCase(IndigoMockTestCase):
+    def setUp(self):
+        IndigoMockTestCase.setUp(self)
+        self.RA = self.plugin_module.ReturnAddress
 
+    def tearDown(self):
+        IndigoMockTestCase.tearDown(self)
+
+    def testReturnAddress_Freezes_and_Thaws(self):
+        d = {"key":"value"}
+        ra = self.RA(d)
+        self.assertEqual(ra["key"], "value")
+        self.assertEqual(len(ra), 1)
+
+        f = ra.freeze()
+        ra2 = self.RA(f)
+        self.assertEqual(ra2["key"], "value")
+        self.assertEqual(len(ra2), 1)
+        self.assertEqual(f, ra2.freeze())
+
+    def testReturnAddress_SelectsItems_UsingFields(self):
+        d = {"key":"value", "name":"fred", "address":"home"}
+        ra = self.RA(d, ["name", "address"])
+        self.assertEqual(ra["name"], "fred")
+        self.assertEqual(ra["address"], "home")
+        self.assertEqual(len(ra), 2)
+
+    def testReturnAddress_ReturnsEmptyString_WhenItemMissing(self):
+        d = {"key":"value"}
+        ra = self.RA(d)
+        self.assertEqual(ra["not a key"], "")
+        self.assertEqual(len(ra), 1)
+
+    def testReturnAddress_Converts_ToIndigoDict(self):
+        d = {"key":"value"}
+        ra = self.RA(d)
+        self.assertEqual(type(ra.indigo_dict()), self.indigo_mock.Dict)
+
+        
 if __name__ == "__main__":
     unittest.main()
