@@ -126,6 +126,7 @@ class ChatbotEngine(object):
                       "referencing other rules too many "
                       "times".format(message),)
             raise
+        assert(Script.uservars is self._users[user].vars)
         self._remember(user, message, reply)
         return reply
 
@@ -225,6 +226,7 @@ class ChatbotEngine(object):
         Script.set_topic(topic)
         
         if new:
+            self._say("New user, running all scripts' setup_user methods")
             for inst in self.rules_db.script_instances:
                 inst.setup_user(user)
             

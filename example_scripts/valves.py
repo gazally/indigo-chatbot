@@ -13,6 +13,27 @@ class ValveScript(Script):
             "drainvalve": "([water] drain valve)",
             "anyvalve"  : "((shutoff|shut off|main|main water|city water|[water] drain) valve)"
             }
+
+        indigo.variable.updateValue(
+            self.get_or_create_indigo_var("leaksensorstatus"), "dry")
+        indigo.variable.updateValue(
+            self.get_or_create_indigo_var("mainvalvestatus"), "closed")
+        indigo.variable.updateValue(
+            self.get_or_create_indigo_var("drainvalvestatus"), "open")
+
+
+    @rule("help [on] (valve|valves|water valves|%a:anyvalve)")
+    def rule_help_valves(self):
+        return ['I can turn the water on and off and drain the house by '
+                'controlling the shutoff valve and the drain valve. Ask me '
+                '"What is the valve status?" to get started.',
+                
+                'Try telling me to turn the water on or off or to drain the '
+                'house.',
+                
+                'If you tell me "sensor wet" I\'ll pretend the leak sensor '
+                'in the bathroom is wet. Then try telling me "Turn the water '
+                'on" and see what I do.']
  
     @rule("open [the] _%a:mainvalve")
     def rule_open_the_mainvalve(self):
@@ -86,7 +107,7 @@ class ValveScript(Script):
         else:
             return "<open drain valve>"
 
-    @rule("(water|leak) sensor status")
+    @rule("[what is [the]] (water|leak) sensor status")
     def rule_water_sensor_status(self):
         return "The water leak sensor is {0}.".format(self.leaksensorstatus())
 
@@ -98,7 +119,7 @@ class ValveScript(Script):
     def rule_what_is_the_drainvalve_status(self):
         return "The {{match0}} is {0}.".format(self.drainvalvestatus())
 
-    @rule("valve status")
+    @rule("[tell me about|how is|what is] [the] valve status")
     def rule_valve_status(self):
         return "<shutoff valve status> <drain valve status>"
 

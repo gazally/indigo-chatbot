@@ -3,21 +3,24 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+from __future__ import print_function
 from __future__ import unicode_literals
 
 import sys
 
 from mock import Mock, MagicMock, patch
-from plugintest import PluginBaseForTest
+from test_plugin import PluginBaseForTest, substitute
 
 class InteractivePlugin(object):
-    def __init__(self, path, python=False):
-        PluginBaseForTest._verbose = True
-        
-        self.indigo_mock = Mock()
+    def __init__(self, path):
+        self.indigo_mock = MagicMock()
         self.indigo_mock.PluginBase = PluginBaseForTest
         self.indigo_mock.PluginBase.pluginPrefs = {u"showDebugInfo" : True}
-        self.indigo_mock.Dict = Mock(return_value={}.copy())
+        self.indigo_mock.PluginBase.debugLog = print
+        self.indigo_mock.PluginBase.errorLog = print
+        self.indigo_mock.PluginBase.sleep = Mock()
+        self.indigo_mock.PluginBase.substitute = substitute
+        self.indigo_mock.Dict = dict
         self.indigo_mock.variables = MagicMock()
         
         modules = sys.modules.copy()
@@ -27,14 +30,14 @@ class InteractivePlugin(object):
         import plugin
 
         self.plugin_module = plugin
-        self.plugin_module.indigo.PluginBase = PluginBaseForTest
         if path == "":
-            path = "./test_scripts"
+            path = "../example_scripts"
         self.path = path
             
         self.plugin = self.plugin_module.Plugin("What's", "here", "doesn't matter",
                                            {u"showDebugInfo" : True,
                                             u"scriptsPath": path})
+        self.plugin.startup()
 
     def __del(self):
         self.module_patcher.stop()
