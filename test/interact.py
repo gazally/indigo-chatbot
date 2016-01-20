@@ -9,19 +9,24 @@ from __future__ import unicode_literals
 import sys
 
 from mock import Mock, MagicMock, patch
-from test_plugin import PluginBaseForTest, substitute
+from test_plugin import PluginBaseForTest, DeviceForTest, substitute
+
+def debugLog(self, string):
+    if self.debug:
+        print(string)
 
 class InteractivePlugin(object):
     def __init__(self, path):
         self.indigo_mock = MagicMock()
         self.indigo_mock.PluginBase = PluginBaseForTest
         self.indigo_mock.PluginBase.pluginPrefs = {u"showDebugInfo" : True}
-        self.indigo_mock.PluginBase.debugLog = print
+        self.indigo_mock.PluginBase.debugLog = debugLog
         self.indigo_mock.PluginBase.errorLog = print
         self.indigo_mock.PluginBase.sleep = Mock()
         self.indigo_mock.PluginBase.substitute = substitute
         self.indigo_mock.Dict = dict
         self.indigo_mock.variables = MagicMock()
+        self.indigo_mock.devices = {}
         
         modules = sys.modules.copy()
         modules["indigo"] = self.indigo_mock
@@ -34,9 +39,10 @@ class InteractivePlugin(object):
             path = "../example_scripts"
         self.path = path
             
-        self.plugin = self.plugin_module.Plugin("What's", "here", "doesn't matter",
-                                           {u"showDebugInfo" : True,
-                                            u"scriptsPath": path})
+        self.plugin = self.plugin_module.Plugin("What's", "here",
+                                                self.plugin_module._VERSION,
+                                                {u"showDebugInfo" : False,
+                                                 u"scriptsPath": path})
         self.plugin.startup()
 
     def __del(self):
@@ -44,9 +50,16 @@ class InteractivePlugin(object):
                 
     def messageLoop(self):
         action = Mock()
-        action.deviceId = None
-        action.props = {"send_method":None, "message_field":None}
-
+        action.props = {"send_method":None, "message_field":None,
+                        "actionVersion":self.plugin_module._VERSION}
+        dev = DeviceForTest(1, "dev", {})
+        action.deviceId = dev.id
+        self.indigo_mock.devices[dev.id] = dev
+        self.plugin.deviceStartComm(dev)
+        print ("Type /quit to quit, /debug to toggle debug output, "
+               "/botvars or /uservars to see values of variables, "
+               "/reload to reload the scripts directory.")
+        
         while True:
             msg = raw_input("You> ")
             if msg == "/quit":
@@ -62,17 +75,17 @@ class InteractivePlugin(object):
                 self.plugin.bot.clear_rules()
                 self.plugin.bot.load_script_directory(self.path)
             elif msg == "/debug":
-                if self.plugin.bot._botvars["debug"] == "True":
-                    self.plugin.bot._botvars["debug"] = "False"
-                else:
-                    self.plugin.bot._botvars["debug"] = "True"
+                self.plugin.toggleDebugging()
             else:
                 action.props[u"message"] = unicode(msg)
-                self.plugin.respondToMessage(action)
+                self.plugin.getChatbotResponse(action)
+                print("Bot> " + dev.states["response"])
+                self.plugin.clearResponse(action)
 
 
 def interact(path=""):
     ip = InteractivePlugin(path)
     ip.messageLoop()
     
-
+if __name__ == "__main__":
+    interact()

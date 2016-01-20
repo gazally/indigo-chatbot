@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <Actions>
-  <Action id="respondToMessage">
-    <Name>Respond to a Message</Name>
-    <CallbackMethod>respondToMessage</CallbackMethod>
+  <Action id="getChatbotResponse" deviceFilter="self.chatbotResponderDevice">
+    <Name>Get Chatbot Response</Name>
+    <CallbackMethod>getChatbotResponse</CallbackMethod>
     <ConfigUI>
       <Field id="header0" type="label">
 	<Label>Ask the Chatbot for a response to:</Label>
@@ -12,50 +12,31 @@
       </Field>
       <Field id="sep1" type="separator"/>
       <Field id="header1" type="label">
-	<Label>Plugin-created device to send the response with:</Label>
+	<Label>Save any information you want to keep about the sender here:</Label>
       </Field>
-      <Field id="device" type="menu">
-	<Label>Device:</Label>
-	<List class="self" filter="" method="deviceListGenerator"/>
+      <Field id="info1" type="textfield" default="">
+	<Label>Sender Info 1:</Label>
       </Field>
-      <Field id="header2" type="label">
-	<Label>Name of action defined by the other plugin:</Label>
+      <Field id="info2" type="textfield" default="">
+	<Label>Sender Info 2:</Label>
       </Field>
-      <Field id="send_method" type="textfield" default="">
-	<Label>Action:</Label>
-      </Field>
-      <Field id="header3" type="label">
-	<Label>What does the other plugin call the message?</Label>
-      </Field>
-      <Field id="message_field" type="textfield" default="">
-	<Label>Property Name:</Label>
-      </Field>
-      <Field id="sep2" type="separator"/>
-      <Field id="header4" type="label">
-	<Label>How does the other plugin address the recipient?</Label>
-      </Field>
-      <Field id="fieldname1" type="textfield" default="">
-	<Label>Property Name 1:</Label>
-      </Field>
-      <Field id="fieldvalue1" type="textfield" default="">
-	<Label>Property Value 1:</Label>
-      </Field>
-      <Field id="fieldname2" type="textfield" default="">
-	<Label>Property Name 2:</Label>
-      </Field>
-      <Field id="fieldvalue2" type="textfield" default="">
-	<Label>Property Value 2:</Label>
+      <Field id="info3" type="textfield" default="">
+	<Label>Sender Info 3:</Label>
       </Field>
       <Field id="sep3" type="separator"/>
       <Field id="explanation2" type="label">
-	<Label>You may leave one or both properties blank if the plugin you are using doesn't require them.</Label>
+	<Label>The Sender Info will be saved in the device state so you can use it to deliver the response.</Label>
       </Field>
       <Field id = "explanation1" type="label">
-	<Label>Variable and device substitution markup (%%v:VARIABLEID%% and  %%d:DEVICEID:STATEKEY%%) work in the message and property value fields.</Label>
+	<Label>Variable and device substitution markup (%%v:VARIABLEID%% and  %%d:DEVICEID:STATEKEY%%) work in all the above fields.</Label>
       </Field>
-      <Field id="actionVersion" type="textfield" hidden="true" defaultValue="0.1">
+      <Field id="actionVersion" type="textfield" hidden="true" defaultValue="0.2">
 	<Label>Hidden action version</Label>
       </Field>
     </ConfigUI>
+  </Action>
+  <Action id="clearResponse" deviceFilter="self.chatbotResponderDevice">
+    <Name>Clear Chatbot Response</Name>
+    <CallbackMethod>clearResponse</CallbackMethod>
   </Action>
 </Actions>

@@ -7,6 +7,7 @@
 """Chatbot plugin for IndigoServer"""
 from __future__ import unicode_literals
 
+from distutils.version import StrictVersion
 from UserDict import UserDict
 import traceback
 
@@ -14,22 +15,18 @@ import indigo
 
 from chatbot_reply import ChatbotEngine, NoRulesFoundError
 
+_VERSION = "0.2"
+_SENDER_INFO_FIELDS = ["info1", "info2", "info3"]
+
+
 # TODO - menu command to relaunch the bot, be able to do this from within the
 #        bot
 # TODO - save and restore bot variables
 # TODO - define bot administrator
 # TODO - pass enough user info into the bot that it could asynchronously reply,
-#        basically the entire props dict in respondToMessage packed into a
+#        basically the entire props dict in getChatbotResponse packed into a
 #        hashable tuple, and some way to make it easy for scripters to do that
 #        Or have them queue it up and put it in runConcurrentThread???
-# TODO - have the preferences validation try to load the script files and report
-#        errors then
-# TODO - Prefs Config UI is maybe the logical place to put a button to reload
-#        the bot files. Or maybe a menu item.
-# TODO - default for scripts path can be set up by getPrefsConfigUiValues,
-#       indigo.server.getDbFilePath() minus the filename on the end might be a
-#       good choice
-# TODO   Action Config dialog could get plugin name from device to show the user
 # TODO - configuration setting for typing speed delay: Computer/Teenager/Adult
 #        (0/1/5)
 
@@ -43,16 +40,28 @@ class Plugin(indigo.PluginBase):
         indigo.PluginBase.__init__(self, plugin_id, display_name,
                                    version, prefs)
         self.debug = prefs.get("showDebugInfo", False)
+        self.debug_engine = prefs.get("showEngineDebugInfo", False)
+
+        if (StrictVersion(prefs.get("configVersion", "0.0")) <
+                StrictVersion(version)):
+            self.debugLog("Updating config version to " + version)
+            prefs["configVersion"] = version
+        self.device_info = {}
 
     def startup(self):
-        self.bot = ChatbotEngine(debug=True,
+        self.debugLog("Startup called")
+        self.bot = ChatbotEngine(self.debug_engine,
                                  debuglogger=self.debugLog,
                                  errorlogger=self.errorLog)
 
         scripts_directory = self.pluginPrefs.get("scriptsPath", "")
-        self.load_scripts(scripts_directory)
+        if scripts_directory:
+            self.load_scripts(scripts_directory)
+        else:
+            self.errorLog("Chatbot plugin is not configured.")
 
     def shutdown(self):
+        self.debugLog("Shutdown called")
         pass
 
     def update(self):
@@ -72,6 +81,7 @@ class Plugin(indigo.PluginBase):
         """ called by the Indigo UI to validate the values dictionary for
         the Plugin Preferences user interface dialog
         """
+        errors = indigo.Dict()
         self.debugLog("Preferences Validation called")
         debug = values.get("showDebugInfo", False)
         if self.debug:
@@ -80,43 +90,44 @@ class Plugin(indigo.PluginBase):
         self.debug = debug
         self.debugLog("Debug logging is on")  # won't print if not self.debug
 
-        scripts_directory = values.get("scriptsPath", "")
-        self.load_scripts(scripts_directory)
-        return(True, values)
+        self.debug_engine = values.get("showEngineDebugInfo", False)
+        self.bot._botvars["debug"] = unicode(self.debug_engine)
 
-    def load_scripts(self, scripts_directory):
+        scripts_directory = values.get("scriptsPath", "")
+        if not scripts_directory:
+            errors["scriptsPath"] = "Directory of script files is required."
+        elif scripts_directory != self.pluginPrefs.get("scriptsPath", ""):
+            self.load_scripts(scripts_directory, errors, "scriptsPath")
+        if errors:
+            return (False, values, errors)
+        else:
+            return(True, values)
+
+    def load_scripts(self, scripts_directory, errors=None, key=None):
         """ Call the chatbot engine to load scripts, catch all exceptions
-        and send them to the error log.
+        and send them to the error log or error dictionary if provided.
         """
-        if scripts_directory:
-            try:
-                self.bot.clear_rules()
-                self.bot.load_script_directory(scripts_directory)
-            except OSError as e:
-                self.debugLog(unicode(e))
-                self.errorLog("Unable to read script files from "
-                              "directory '{0}'".format(
-                                  scripts_directory))
-            except NoRulesFoundError as e:
-                self.errorLog(unicode(e))
-            except Exception:
-                self.errorLog(traceback.format_exc())
+        message = ""
+        try:
+            self.bot.clear_rules()
+            self.bot.load_script_directory(scripts_directory)
+        except OSError as e:
+            self.errorLog(unicode(e))
+            message = ("Unable to read script files from directory "
+                       "'{0}'".format(scripts_directory))
+        except NoRulesFoundError as e:
+            message = unicode(e)
+        except Exception:
+            self.errorLog(traceback.format_exc())
+            message = "Error reading script files"
+
+        if message:
+            self.errorLog(message)
+        if errors is not None:
+            if message:
+                errors[key] = message
 
     # ----- Action Configuration UI ----- #
-
-    def deviceListGenerator(self, filter="", values=None, type_id="",
-                            target_id=0):
-        """ Called by the Indigo UI for the Action Config dialog, to
-        fill the list of devices. Filters for plugin-created devices,
-        since Indigo doesn't supply that functionality.
-        """
-        results = []
-        for dev in indigo.devices:
-            if dev.protocol == indigo.kProtocol.Plugin:
-                results.insert(0, (unicode(dev.id), dev.name))
-        results = sorted(results, key=lambda tup: tup[1])
-        results.insert(0, (0, "Just ask chatbot for response, don't send it"))
-        return results
 
     def validateActionConfigUi(self, values, type_id, device_id):
         """ called by the Indigo UI to validate the values dictionary
@@ -125,47 +136,30 @@ class Plugin(indigo.PluginBase):
         self.debugLog("Action Validation called for %s" % type_id)
         errors = indigo.Dict()
 
-        if "message" not in values or not values["message"]:
+        if StrictVersion(values["actionVersion"]) < StrictVersion(_VERSION):
+            values["actionVersion"] = _VERSION
+
+        if not values["message"]:
             errors["message"] = "Can't reply to an empty message."
         else:
             self.validate_substitution(values, errors, "message")
-
-        if device_id:
-            if not values["send_method"]:
-                errors["send_method"] = ("See the plugin documentation for the "
-                                         "name of the callback method.")
-            if not values["message_field"]:
-                errors["message_field"] = ("See the plugin documentation for "
-                                           "the name of the message field.")
-            self.validate_field(values, errors, "1")
-            self.validate_field(values, errors, "2")
+            for k in _SENDER_INFO_FIELDS:
+                self.validate_substitution(values, errors, k)
 
         if errors:
             return (False, values, errors)
         else:
             return (True, values)
 
-    def validate_substitution(self, values, errors, field):
+    def validate_substitution(self, values, errors, key):
         """ Run the variable and device substitution syntax check on
-        values[field]. If an error is returned, put that in errors[field].
+        values[field]. If an error is returned, put that in errors[key].
         """
-        tup = self.substitute(values[field], validateOnly=True)
+        tup = self.substitute(values[key], validateOnly=True)
         valid = tup[0]
         if not valid:
-            errors[field] = tup[1]
+            errors[key] = tup[1]
 
-    def validate_field(self, values, errors, num):
-        """ Eventually we are going to build a dictionary using field names and
-        values that the user is supplying to the Action Config dialog. If the
-        user enters a field value, but not a name to go with it, lodge a
-        complaint.
-        """
-        if values["fieldvalue" + num]:
-            self.validate_substitution(values, errors, "fieldvalue" + num)
-            if not values["fieldname" + num]:
-                errors["fieldname" + num] = ("See the plugin documentation for "
-                                             "the names of the fields it needs "
-                                             "to address a message.")
 
     # ----- Menu Items ----- #
 
@@ -178,132 +172,177 @@ class Plugin(indigo.PluginBase):
         self.debug = not self.debug
         self.pluginPrefs["showDebugInfo"] = self.debug
 
+    def toggleEngineDebugging(self):
+        """ Called by the Indigo UI for the Toggle Chatbot Engine 
+        Debugging menu item. 
+        """
+        if self.debug_engine:
+            self.debugLog("Turning off chatbot engine debug logging")
+        else:
+            self.debugLog("Turning on chatbot engine debug logging")
+        self.debug_engine = not self.debug_engine
+        self.pluginPrefs["showEngineDebugInfo"] = self.debug_engine
+        self.bot._botvars["debug"] = unicode(self.debug_engine)
+
+    def reloadScripts(self):
+        """ Called by the Indigo UI for the Reload Script Files menu item. """
+        scripts_directory = self.pluginPrefs.get("scriptsPath", "")
+        if scripts_directory:
+            self.load_scripts(scripts_directory)
+        else:
+            self.errorLog("Can't load script files because the scripts "
+                          "directory has not been set. See the Chatbot "
+                          "Configure dialog.")
+        
+
+    # ----- Device Start and Stop methods  ----- #
+
+    def deviceStartComm(self, device):
+        """Called by Indigo Server to tell a device to start working.
+        Initialize the device's message backlog to empty.
+
+        """
+        props = device.pluginProps
+        if "deviceVersion" not in props:
+            props["deviceVersion"] = _VERSION
+            device.replacePluginPropsOnServer(props)
+
+        self.debugLog("Starting device {0}".format(device.id))
+        self.device_info[device.id] = []
+        self.clear_device_state(device)
+
+    def clear_device_state(self, device):
+        device.updateStateOnServer("message", "")
+        device.updateStateOnServer("response", "")
+        for k in _SENDER_INFO_FIELDS:
+            device.updateStateOnServer(k, "")
+        device.updateStateOnServer("status", "Idle")
+
+    def deviceStopComm(self, device):
+        """ Called by Indigo Server to tell us it's done with a device.
+        """
+        self.debugLog("Stopping device: {0}".format(device.id))
+        self.device_info.pop(device.id, None)
+
     # ----- Action Callbacks ----- #
 
-    def respondToMessage(self, action):
+    def getChatbotResponse(self, action):
         """ Called by the Indigo Server to implement the respondToMessage
         action defined in Actions.xml.
 
-        Run the chat script and find a response to a message.
+        If the device is busy, which means there is an uncleared response,
+        put the message and sender info in the backlog.
+
+        Otherwise, run the chat script and find a response to a message and
+        set the device state to Ready with all sender info.
 
         The following should be defined in action.props:
         message: the message to respond to
-        device_id: an indigo device id of a plugin-defined device
-        send_method: a plugin action defined by the other plugin
-        message_field: what the other plugin would like the outgoing message
-                       to be called in its action properties dictionary
-
-        The following may be defined in action.props:
-        fieldname1: a fieldname the other plugin needs in its action props dict
-        fieldvalue1: a value for that field name
-        fieldname2: another fieldname the other plugin needs
-        fieldvalue2: a value for the second field
-
-        If device_id is 0, the chat script will still be run on the message.
-        This is useful if you want to quietly update the state of the chatbot.
-
-        If the chatbot returns an empty reply, nothing will be sent.
+        sender_info1, sender_info2, sender_info3: some information about the
+            sender that the user wants to save
 
         Indigo's device and variable substitution will be used on the
         message before sending it to the chatbot reply engine, and on the
-        field values before sending the response to the other plugin.
+        sender_info values before saving them.
         """
         message = self.substitute(action.props.get("message", ""),
                                   validateOnly=False)
         if not message:
             self.errorLog("Can't respond to an empty message")
             return
+        if (StrictVersion(action.props.get("actionVersion", "0.0")) <
+             StrictVersion(_VERSION)):
+            self.errorLog("Action is from a previous version of this plugin. "
+                          "Please check and save the Action Settings.")
+            return
 
-        ra = ReturnAddress(action.props, ["device", "send_method",
-                                          "message_field", "fieldname1",
-                                          "fieldvalue1", "fieldname2",
-                                          "fieldvalue2"])
-        if "fieldvalue1" in ra:
-            ra["fieldvalue1"] = self.substitute(ra["fieldvalue1"])
-        if "fieldvalue2" in ra:
-            ra["fieldvalue2"] = self.substitute(ra["fieldvalue2"])
+        device = indigo.devices[action.deviceId]
+        sender_info = dict([(k, self.substitute(action.props.get(k, "")))
+                            for k in _SENDER_INFO_FIELDS])
 
-        self.debugLog("Processing message: %s" % message)
-        reply = self.bot.reply(ra.freeze(), message)
-        self.debugLog("Chatbot response: %s" % reply)
+        if device.states["status"] == "Idle":
+            self.device_respond(device, message, sender_info)
+        else:
+            self.device_info[action.deviceId].append((message, sender_info))
+
+    def device_respond(self, device, message, sender_info):
+        device.updateStateOnServer("status", "Processing")
+
+        info = {"device_id": device.id}
+        info.update(sender_info)
+        user = ReturnAddress(info=info).freeze()
+        try:
+            self.debugLog("Processing message: '{0}' From user {1}".format(
+                message, user))
+            reply = self.bot.reply(user, message)
+            self.debugLog("Chatbot response: '{0}'".format(reply))
+        except Exception:
+            # kill any backlog, so as not to add to the confusion
+            device.updateStateOnServer("status", "Idle")
+            del self.device_info[device.id][:]
+            raise
 
         if reply:
-            self.send_response(reply, ra)
+            device.updateStateOnServer("message", message)
+            device.updateStateOnServer("response", reply)
+            for k in _SENDER_INFO_FIELDS:
+                device.updateStateOnServer(k, sender_info[k])
+            device.updateStateOnServer("status", "Ready")
+        else:
+            self.clear_device_state(device)
 
-    def send_response(self, reply, ra):
-        """ Given a return address object that describes an action in another
-        plugin and its parameters, construct an action.props dictionary for
-        that plugin and ask Indigo to execute the action. Returns silently
-        if the device_id in the return address is 0, and returns after logging
-        errors if the device doesn't exist, isn't a plugin, or isn't enabled.
-        Other errors that come out of Indigo's executeAction method will not
-        be caught. """
-        device_id = int(ra.get("device", 0))
-        if not device_id:
-            return
-        if (device_id not in indigo.devices or
-                indigo.devices[device_id].protocol != indigo.kProtocol.Plugin):
-            self.errorLog("Device {0} no longer exists or is not "
-                          "plugin-defined, reply cannot be "
-                          " sent".format(device_id))
-            return
-        device = indigo.devices[device_id]
-        reply_to = indigo.server.getPlugin(device.pluginId)
-        if not reply_to.isEnabled():
-            self.errorLog("Plugin {0} not available or enabled, "
-                          "reply cannot be sent.".format(device.pluginId))
-            return
+    def clearResponse(self, action):
+        """Called by Indigo Server to implement clearResponse action in
+        Actions.xml. Only uses action.deviceId, not props. If there are
+        waiting messages to process, get responses for them from the chatbot.
+        Empty replies are ignored.
 
-        send_method = ra["send_method"]
-        props = indigo.Dict()
-        if "message_field" in ra:
-            props[ra["message_field"]] = reply
-        if "fieldname1" in ra:
-            props[ra["fieldname1"]] = ra["fieldvalue1"]
-        if "fieldname2" in ra:
-            props[ra["fieldname2"]] = ra["fieldvalue2"]
+        """
+        device = indigo.devices[action.deviceId]
+        status = device.states["status"]
+        if status != "Idle":
+            device.updateStateOnServer("status", "Idle")
 
-        reply_to.executeAction(send_method, deviceId=device_id,
-                               props=props)
+        backlog = self.device_info.get(action.deviceId, None)
+        while backlog:
+            message, sender_info = backlog.pop(0)
+            self.device_respond(device, message, sender_info)
+            device.refreshFromServer()
+            if device.states["status"] == "Ready":
+                return
+        self.clear_device_state(device)
 
 
-class ReturnAddress(UserDict):
-    """ A dictionary object with a few extra methods to make it useful as a
-    return address for chatbot replies. Behaves as a defaultdict with the
-    default value ""
+class ReturnAddress(object):
+    """ A return address for chatbot replies.
 
     Public instance methods:
         freeze() - Returns itself as a frozenset, so it can be used as a key
-                   in other dictionaries, as long as you didn't put anything
-                   other than hashable values in it.
-        indigo_dict() - Returns itself as an indigo.Dict object.
-    """
-    def __init__(self, props, fields=None):
-        """ Construct a ReturnAddress object.
-        parameters:
-            props - may be either a frozenset containing tuples or some kind
-                    of dictionary object.
-            fields - optional list of key names. If provided, only items from
-                    props with the key or tuple[0] in fields will be placed
-                    in the new object.
-        """
-        UserDict.__init__(self)
-        if isinstance(props, frozenset):
-            items = [tup for tup in props]
-        else:
-            items = [tup for tup in props.items()]
+                   in dictionaries, as long as you didn't put anything
+                   other than hashable values in the info dictionary
+                   passed to the constructor
 
-        if fields is not None:
-            self.data.update(((k, v) for k, v in items
-                              if k in fields))
+    Public instance variables:
+        info - dictionary
+    """
+    def __init__(self, **kwargs):
+        """ Construct a ReturnAddress object.
+        named parameters:
+            info - a dictionary of information identifying the user
+            frozen - a frozen ReturnAddress object to be thawed
+
+        You must supply either frozen or info, but not both, or an error
+        will be raised.
+        """
+        if "frozen" in kwargs:
+            items = [x for x in kwargs.pop("frozen")]
+            self.info = dict([tup for tup in items])
+        elif "info" in kwargs:
+            self.info = kwargs.pop("info")
         else:
-            self.data.update(items)
+            raise(TypeError, "One argument is required")
+        if kwargs:
+            raise(TypeError, "Unexpected keyword argument")
 
     def freeze(self):
-        return frozenset(self.data.items())
-
-    def indigo_dict(self):
-        return indigo.Dict(self.data)
-
-    def __missing__(self, key):
-        return ""
+        return frozenset(self.info.items())

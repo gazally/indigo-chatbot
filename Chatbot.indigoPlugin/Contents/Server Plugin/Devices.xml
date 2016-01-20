@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<Devices>
+  <Device type="custom" id="chatbotResponderDevice">
+    <Name>Chatbot Responder Device</Name>
+    <ConfigUI>			
+      <Field id="instructions" type="label">
+	<Label>This device will contact the chatbot engine and get a reply to a message.</Label>
+      </Field>
+      <Field id="deviceVersion" type="textfield" hidden="true" defaultValue="0.2">
+	<Label>Hidden device version</Label>
+      </Field>
+    </ConfigUI>
+    <States>
+      <State id="status">
+	<ValueType>String</ValueType>
+	<TriggerLabel>Status:</TriggerLabel>
+	<ControlPageLabel>Status:</ControlPageLabel>
+      </State>
+      <State id="message">
+	<ValueType>String</ValueType>
+	<TriggerLabel>Message:</TriggerLabel>
+	<ControlPageLabel>Message:</ControlPageLabel>
+      </State>
+      <State id="response">
+	<ValueType>String</ValueType>
+	<TriggerLabel>Response:</TriggerLabel>
+	<ControlPageLabel>Response:</ControlPageLabel>
+      </State>
+      <State id="info1">
+	<ValueType>String</ValueType>
+	<TriggerLabel>Sender Info 1:</TriggerLabel>
+	<ControlPageLabel>Sender Info 1:</ControlPageLabel>
+      </State>
+      <State id="info2">
+	<ValueType>String</ValueType>
+	<TriggerLabel>Sender Info 2:</TriggerLabel>
+	<ControlPageLabel>Sender Info 2:</ControlPageLabel>
+      </State> 
+      <State id="info3">
+	<ValueType>String</ValueType>
+	<TriggerLabel>Sender Info 3:</TriggerLabel>
+	<ControlPageLabel>Sender Info 3:</ControlPageLabel>
+      </State>
+    </States>
+    <UiDisplayStateId>status</UiDisplayStateId>
+  </Device>
+</Devices>
