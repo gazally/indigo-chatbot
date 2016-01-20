@@ -99,7 +99,7 @@ class ElizaScript(Script):
     def rule_leave_eliza(self):
         Script.set_topic("all")
         return ["Goodbye. It was nice talking to you.",
-                "Goodbye. I'm looking forward to the next time we talk."
+                "Goodbye. I'm looking forward to the next time we talk.",
                 "It was nice talking to you. Goodbye.",
                 "Maybe we could talk about this more next time? Goodbye."]
 

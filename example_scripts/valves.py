@@ -19,8 +19,7 @@ class ValveScript(Script):
         indigo.variable.updateValue(
             self.get_or_create_indigo_var("mainvalvestatus"), "closed")
         indigo.variable.updateValue(
-            self.get_or_create_indigo_var("drainvalvestatus"), "open")
-
+            self.get_or_create_indigo_var("drainvalvestatus"), "closed")
 
     @rule("help [on] (valve|valves|water valves|%a:anyvalve)")
     def rule_help_valves(self):
