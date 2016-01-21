@@ -63,7 +63,7 @@ The Get Chatbot Response action has three generic fields for stashing away infor
 
 ### That one second delay is a kludge and I don't like it
 
-Well it's a kludge that mostly works, at least on my lightly loaded Indigo Server. But you could get rid of it with two more triggers, one to mark the message as read when the Chatbot Responder device state changes to Processing and another to clear the chatbot response when the Messages App device state changes to Sending.
+Well it's a kludge that mostly works, at least on my lightly loaded Indigo Server. But you could get rid of it with two more triggers, one to mark the message as read when the Chatbot Responder device state changes to Processing and another to clear the chatbot response when the Messages App device "Status of Last Sent Message" changes to Sending.
 
 ### Getting started writing Chat Scripts
 
