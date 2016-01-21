@@ -147,8 +147,3 @@ FUNCTIONS
     split_on_whitespace(text)
         Because this has to work in Py 2.6, and re.split doesn't do UNICODE
         in 2.6.  Return text broken into words by whitespace.
-
-DATA
-    unicode_literals = _Feature((2, 6, 0, 'alpha', 2), (3, 0, 0, 'alpha', ...
-
-
