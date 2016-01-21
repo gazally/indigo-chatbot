@@ -55,11 +55,15 @@ The method just described requires you to set up two triggers and two devices pe
 
 First, in the configuration for Get Chatbot Response, you will need to put %%d:00000000:service%% in the first Sender Info field and %%d:00000000:handle%% in the second, in both cases replacing the 00000000 with the id of your Messages App Device.
 
-Second, in the configuration for the Send Message Action, you should put %%d:11111111:info1%% in the Service: field and %%d:11111111:info2%% in the handle field, except instead of 11111111 use the id of your Chatbot Responder device.
+Second, in the configuration for the Send Message Action, you should put %%d:11111111:info1%% in the Service field and %%d:11111111:info2%% in the Handle field, except instead of 11111111 use the id of your Chatbot Responder device.
 
 ### What is going on here?
 
 The Get Chatbot Response action has three generic fields for stashing away information about who to reply to. Using device state substitution, you can get this information from the states of the Chatbot Responder device and use it to configure the action of whichever plugin you use to deliver the reply.
+
+### That one second delay is a kludge and I don't like it
+
+Well it's a kludge that mostly works, at least on my lightly loaded Indigo Server. But you could get rid of it with two more triggers, one to mark the message as read when the Chatbot Responder device state changes to Processing and another to clear the chatbot response when the Messages App device state changes to Sending.
 
 ### Getting started writing Chat Scripts
 
@@ -95,14 +99,36 @@ if chatbotPlugin.isEnabled():
 # Now go do something with reply, service and handle...
 ```
 
-### What does the future hold?
+### What does the future hold? Some ideas.
 
-A chatbot rule method that takes a long time to execute will block the plugin from responding to anyone else. Maybe rules need to be run in separate threads and maybe separate processes.
+The chatbot engine waits for rule methods to finish. Rules need to be run in separate threads or maybe separate processes.
 
-It would be nice to have a mechanism for asynchronous replies, so that based on things that happen in Indigo, the chatbot engine could be triggered to send unprompted messages.
+It would be nice to have a mechanism for asynchronous replies, so that based on things that happen in Indigo, the chatbot engine could be triggered to send unprompted messages, using address information it has saved. Currently you could do that by having a trigger ask for a reply to a message the user didn't actually send. But the logic seems convoluted. The whole area needs some thought.
 
 There are internal state variables for the chatbot scripts. These could be saved to a file and reloaded.
 
 It's kind of disconcerting how fast replies arrive. Perhaps a typing delay simulator would help.
 
-By the time a message gets to the chatbot, all the chatbot knows about who it is from is the device number plus the three Sender Info fields. Adding a field for the sender's name would be useful for logging and script logic. 
+By the time a message gets to the chatbot engine, all the chatbot knows about who it is from is the device number plus the three Sender Info fields. Adding a field for the sender's real name would be useful for logging and script logic. 
+
+Import all Indigo variable names, device names, action group names, etc... into variables for chatbot scripts to use.
+
+Better tokenizing of numbers and numeric expressions.
+
+Let scripts supply a list of substitutions to be made in the tokenizer, instead of or in addition to a substitute function.
+
+Parsing of time expressions. "Turn off the basement lights in an hour" and "Turn off the basement lights at 3:30" should be handled by the same rule.
+
+Could define an exception that rules could raise if they look at the match dictionary and decide it doesn't make sense, and then the engine would search for the next rule that matches. If I do this, I'm going to call the exception Punt.
+
+Add wildcard syntax to match anything except a list of supplied words. For example: "I *~3!(hate|not) cookies"
+
+Make case-sensitive matching an option?
+
+### What are some known issues
+
+If you don't put any rules in the default topic, "all", the chatbot won't deal with that very well.
+
+Rule methods that take a long time will block the chatbot from responding to anyone else.
+
+Eliza lost her memory once, and I haven't been able to reproduce it.
