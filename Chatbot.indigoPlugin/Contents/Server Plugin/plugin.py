@@ -19,18 +19,6 @@ _VERSION = "0.2"
 _SENDER_INFO_FIELDS = ["info1", "info2", "info3"]
 
 
-# TODO - menu command to relaunch the bot, be able to do this from within the
-#        bot
-# TODO - save and restore bot variables
-# TODO - define bot administrator
-# TODO - pass enough user info into the bot that it could asynchronously reply,
-#        basically the entire props dict in getChatbotResponse packed into a
-#        hashable tuple, and some way to make it easy for scripters to do that
-#        Or have them queue it up and put it in runConcurrentThread???
-# TODO - configuration setting for typing speed delay: Computer/Teenager/Adult
-#        (0/1/5)
-
-
 class Plugin(indigo.PluginBase):
     """Chatbot plugin class for IndigoServer"""
 
@@ -167,9 +155,8 @@ class Plugin(indigo.PluginBase):
         """ Called by the Indigo UI for the Toggle Debugging menu item. """
         if self.debug:
             self.debugLog("Turning off debug logging")
-        else:
-            self.debugLog("Turning on debug logging")
         self.debug = not self.debug
+        self.debugLog("Turning on debug logging")  # won't print if !self.debug
         self.pluginPrefs["showDebugInfo"] = self.debug
 
     def toggleEngineDebugging(self):
@@ -250,10 +237,11 @@ class Plugin(indigo.PluginBase):
         if not message:
             self.errorLog("Can't respond to an empty message")
             return
-        if (StrictVersion(action.props.get("actionVersion", "0.0")) <
-             StrictVersion(_VERSION)):
-            self.errorLog("Action is from a previous version of this plugin. "
-                          "Please check and save the Action Settings.")
+        if ("actionVersion" in action.props and
+                StrictVersion(action.props["actionVersion"]) <
+                StrictVersion(_VERSION)):
+            self.errorLog("Action was configured by a previous version of this "
+                          "plugin. Please check and save the Action Settings.")
             return
 
         device = indigo.devices[action.deviceId]
@@ -266,6 +254,12 @@ class Plugin(indigo.PluginBase):
             self.device_info[action.deviceId].append((message, sender_info))
 
     def device_respond(self, device, message, sender_info):
+        """ Ask the chatbot for a response to a message. If it returns a
+        non-empty reply, set the device to Ready with the response and 
+        sender info. If it returns an empty reply, clear the device state.
+        If it raises an error, also clear the device and clear the device's
+        backlog too, and then re-raise.
+        """
         device.updateStateOnServer("status", "Processing")
 
         info = {"device_id": device.id}
@@ -278,8 +272,8 @@ class Plugin(indigo.PluginBase):
             self.debugLog("Chatbot response: '{0}'".format(reply))
         except Exception:
             # kill any backlog, so as not to add to the confusion
-            device.updateStateOnServer("status", "Idle")
             del self.device_info[device.id][:]
+            self.clear_device_state(device)
             raise
 
         if reply:

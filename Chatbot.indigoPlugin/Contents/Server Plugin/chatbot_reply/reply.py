@@ -77,11 +77,11 @@ class ChatbotEngine(object):
         """
         if warning:
             if self._errorlogger:
-                self._errorlogger("[Chatbot {0}] {1}".format(warning,
+                self._errorlogger("[Reply {0}] {1}".format(warning,
                                                              message))
         elif (self._variables["b"].get("debug", "False") == "True"
               and self._debuglogger):
-            self._debuglogger("[Chatbot] {0}".format(message))
+            self._debuglogger("[Reply] {0}".format(message))
 
     def clear_rules(self):
         """ Empty the rules database """
