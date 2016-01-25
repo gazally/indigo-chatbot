@@ -9,7 +9,7 @@ from chatbot_reply import rule, Script
 class ElizaIntroScript(Script):
     @rule("[id like to|can i|may i] talk to Eliza")
     def rule_eliza_intro(self):
-        Script.set_topic("eliza")
+        self.current_topic = "eliza"
         return ["Hi, I'm Eliza. If you have a problem tell me about it.",
                 "Hello, my name is Eliza. Please tell me what's been troubling you.",
                 "Hi, I'm Eliza. Is something bothering you?"]
@@ -97,7 +97,7 @@ class ElizaScript(Script):
 
     @rule("(bye|goodbye|done|exit|quit)")
     def rule_leave_eliza(self):
-        Script.set_topic("all")
+        self.current_topic = "all"
         return ["Goodbye. It was nice talking to you.",
                 "Goodbye. I'm looking forward to the next time we talk.",
                 "It was nice talking to you. Goodbye.",
