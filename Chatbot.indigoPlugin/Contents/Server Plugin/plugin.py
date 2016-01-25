@@ -5,10 +5,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 """Chatbot plugin for IndigoServer"""
+from __future__ import print_function
 from __future__ import unicode_literals
 
 from distutils.version import StrictVersion
-from UserDict import UserDict
+import logging
 import traceback
 
 import indigo
@@ -17,6 +18,9 @@ from chatbot_reply import ChatbotEngine, NoRulesFoundError
 
 _VERSION = "0.2"
 _SENDER_INFO_FIELDS = ["info1", "info2", "info3"]
+
+log = logging.getLogger()
+log_chatbot = logging.getLogger("chatbot_reply")
 
 
 class Plugin(indigo.PluginBase):
@@ -29,27 +33,26 @@ class Plugin(indigo.PluginBase):
                                    version, prefs)
         self.debug = prefs.get("showDebugInfo", False)
         self.debug_engine = prefs.get("showEngineDebugInfo", False)
+        self.configure_logging()
 
         if (StrictVersion(prefs.get("configVersion", "0.0")) <
                 StrictVersion(version)):
-            self.debugLog("Updating config version to " + version)
+            log.debug("Updating config version to " + version)
             prefs["configVersion"] = version
         self.device_info = {}
 
     def startup(self):
-        self.debugLog("Startup called")
-        self.bot = ChatbotEngine(self.debug_engine,
-                                 debuglogger=self.debugLog,
-                                 errorlogger=self.errorLog)
+        log.debug("Startup called")
+        self.bot = ChatbotEngine()
 
         scripts_directory = self.pluginPrefs.get("scriptsPath", "")
         if scripts_directory:
             self.load_scripts(scripts_directory)
         else:
-            self.errorLog("Chatbot plugin is not configured.")
+            log.error("Chatbot plugin is not configured.")
 
     def shutdown(self):
-        self.debugLog("Shutdown called")
+        log.debug("Shutdown called")
         pass
 
     def update(self):
@@ -63,6 +66,39 @@ class Plugin(indigo.PluginBase):
         except self.StopThread:
             pass
 
+    # ----- Logging Configuration ----- #
+
+    def configure_logging(self):
+        def make_logging_handler(debugLog, errorLog):
+            class NewHandler(logging.Handler):
+                def emit(self, record):
+                    try:
+                        msg = self.format(record)
+                        if record.levelno < logging.WARNING:
+                            debugLog(msg)
+                        else:
+                            errorLog(msg)
+                    except Exception:
+                        self.handleError(record)
+            return NewHandler()
+
+        h = make_logging_handler(self.debugLog, self.errorLog)
+        log.addHandler(h)
+        log.setLevel(logging.DEBUG)
+
+        h_chatbot = make_logging_handler(self.debugLog, self.errorLog)
+        f = logging.Formatter("[Engine] %(message)s")
+        h_chatbot.setFormatter(f)
+        log_chatbot.addHandler(h_chatbot)
+        log_chatbot.propagate = False
+        self.set_chatbot_logging()
+
+    def set_chatbot_logging(self):
+        if self.debug_engine:
+            log_chatbot.setLevel(logging.DEBUG)
+        else:
+            log_chatbot.setLevel(logging.WARNING)
+
     # ----- Preferences UI ----- #
 
     def validatePrefsConfigUi(self, values):
@@ -70,16 +106,16 @@ class Plugin(indigo.PluginBase):
         the Plugin Preferences user interface dialog
         """
         errors = indigo.Dict()
-        self.debugLog("Preferences Validation called")
+        log.debug("Preferences Validation called")
         debug = values.get("showDebugInfo", False)
         if self.debug:
             if not debug:
-                self.debugLog("Turning off debug logging")
+                log.debug("Turning off debug logging")
         self.debug = debug
-        self.debugLog("Debug logging is on")  # won't print if not self.debug
+        log.debug("Debug logging is on")  # won't print if not self.debug
 
         self.debug_engine = values.get("showEngineDebugInfo", False)
-        self.bot._botvars["debug"] = unicode(self.debug_engine)
+        self.set_chatbot_logging()
 
         scripts_directory = values.get("scriptsPath", "")
         if not scripts_directory:
@@ -100,17 +136,17 @@ class Plugin(indigo.PluginBase):
             self.bot.clear_rules()
             self.bot.load_script_directory(scripts_directory)
         except OSError as e:
-            self.errorLog(unicode(e))
+            log.error("", exc_info=True)
             message = ("Unable to read script files from directory "
                        "'{0}'".format(scripts_directory))
         except NoRulesFoundError as e:
             message = unicode(e)
         except Exception:
-            self.errorLog(traceback.format_exc())
+            log.error("", exc_info=True)
             message = "Error reading script files"
 
         if message:
-            self.errorLog(message)
+            log.error(message)
         if errors is not None:
             if message:
                 errors[key] = message
@@ -121,7 +157,7 @@ class Plugin(indigo.PluginBase):
         """ called by the Indigo UI to validate the values dictionary
         for the Action user interface dialog
         """
-        self.debugLog("Action Validation called for %s" % type_id)
+        log.debug("Action Validation called for %s" % type_id)
         errors = indigo.Dict()
 
         if StrictVersion(values["actionVersion"]) < StrictVersion(_VERSION):
@@ -129,47 +165,50 @@ class Plugin(indigo.PluginBase):
 
         if not values["message"]:
             errors["message"] = "Can't reply to an empty message."
-        else:
-            self.validate_substitution(values, errors, "message")
-            for k in _SENDER_INFO_FIELDS:
-                self.validate_substitution(values, errors, k)
 
+        if not values["name"]:
+            errors["name"] = "Name of the message sender is required."
+
+        fields =  ["message", "name"]
+        fields.extend(_SENDER_INFO_FIELDS)
+        self.validate_substitution(values, errors, fields)
+                                  
         if errors:
             return (False, values, errors)
         else:
             return (True, values)
 
-    def validate_substitution(self, values, errors, key):
+    def validate_substitution(self, values, errors, keys):
         """ Run the variable and device substitution syntax check on
-        values[field]. If an error is returned, put that in errors[key].
+        values[key]. If an error is returned, put that in errors[key].
         """
-        tup = self.substitute(values[key], validateOnly=True)
-        valid = tup[0]
-        if not valid:
-            errors[key] = tup[1]
-
+        for key in keys:
+            tup = self.substitute(values[key], validateOnly=True)
+            valid = tup[0]
+            if not valid:
+                errors[key] = tup[1]
 
     # ----- Menu Items ----- #
 
     def toggleDebugging(self):
         """ Called by the Indigo UI for the Toggle Debugging menu item. """
         if self.debug:
-            self.debugLog("Turning off debug logging")
+            log.debug("Turning off debug logging")
         self.debug = not self.debug
-        self.debugLog("Turning on debug logging")  # won't print if !self.debug
+        log.debug("Turning on debug logging")  # won't print if !self.debug
         self.pluginPrefs["showDebugInfo"] = self.debug
 
     def toggleEngineDebugging(self):
-        """ Called by the Indigo UI for the Toggle Chatbot Engine 
-        Debugging menu item. 
+        """ Called by the Indigo UI for the Toggle Chatbot Engine
+        Debugging menu item.
         """
         if self.debug_engine:
-            self.debugLog("Turning off chatbot engine debug logging")
+            log.debug("Turning off chatbot engine debug logging")
         else:
-            self.debugLog("Turning on chatbot engine debug logging")
+            log.debug("Turning on chatbot engine debug logging")
         self.debug_engine = not self.debug_engine
         self.pluginPrefs["showEngineDebugInfo"] = self.debug_engine
-        self.bot._botvars["debug"] = unicode(self.debug_engine)
+        self.set_chatbot_logging()
 
     def reloadScripts(self):
         """ Called by the Indigo UI for the Reload Script Files menu item. """
@@ -177,10 +216,9 @@ class Plugin(indigo.PluginBase):
         if scripts_directory:
             self.load_scripts(scripts_directory)
         else:
-            self.errorLog("Can't load script files because the scripts "
-                          "directory has not been set. See the Chatbot "
-                          "Configure dialog.")
-        
+            log.error("Can't load script files because the scripts "
+                      "directory has not been set. See the Chatbot "
+                      "Configure dialog.")
 
     # ----- Device Start and Stop methods  ----- #
 
@@ -194,13 +232,14 @@ class Plugin(indigo.PluginBase):
             props["deviceVersion"] = _VERSION
             device.replacePluginPropsOnServer(props)
 
-        self.debugLog("Starting device {0}".format(device.id))
+        log.debug("Starting device {0}".format(device.id))
         self.device_info[device.id] = []
         self.clear_device_state(device)
 
     def clear_device_state(self, device):
         device.updateStateOnServer("message", "")
         device.updateStateOnServer("response", "")
+        device.updateStateOnServer("name", "")
         for k in _SENDER_INFO_FIELDS:
             device.updateStateOnServer(k, "")
         device.updateStateOnServer("status", "Idle")
@@ -208,7 +247,7 @@ class Plugin(indigo.PluginBase):
     def deviceStopComm(self, device):
         """ Called by Indigo Server to tell us it's done with a device.
         """
-        self.debugLog("Stopping device: {0}".format(device.id))
+        log.debug("Stopping device: {0}".format(device.id))
         self.device_info.pop(device.id, None)
 
     # ----- Action Callbacks ----- #
@@ -225,7 +264,8 @@ class Plugin(indigo.PluginBase):
 
         The following should be defined in action.props:
         message: the message to respond to
-        sender_info1, sender_info2, sender_info3: some information about the
+        name: name of the sender
+        info1, info2, info3: some information about the
             sender that the user wants to save
 
         Indigo's device and variable substitution will be used on the
@@ -234,20 +274,24 @@ class Plugin(indigo.PluginBase):
         """
         message = self.substitute(action.props.get("message", ""),
                                   validateOnly=False)
+        name = self.substitute(action.props.get("name", ""),
+                               validateOnly=False)
         if not message:
-            self.errorLog("Can't respond to an empty message")
+            log.error("Can't respond to an empty message")
             return
         if ("actionVersion" in action.props and
                 StrictVersion(action.props["actionVersion"]) <
                 StrictVersion(_VERSION)):
-            self.errorLog("Action was configured by a previous version of this "
-                          "plugin. Please check and save the Action Settings.")
+            log.error("Action was configured by a previous version of this "
+                      "plugin. Please check and save the Action Settings.")
             return
 
-        device = indigo.devices[action.deviceId]
         sender_info = dict([(k, self.substitute(action.props.get(k, "")))
                             for k in _SENDER_INFO_FIELDS])
+        sender_info["device_id"] = action.deviceId
+        sender_info["name"] = name
 
+        device = indigo.devices[action.deviceId]
         if device.states["status"] == "Idle":
             self.device_respond(device, message, sender_info)
         else:
@@ -255,21 +299,18 @@ class Plugin(indigo.PluginBase):
 
     def device_respond(self, device, message, sender_info):
         """ Ask the chatbot for a response to a message. If it returns a
-        non-empty reply, set the device to Ready with the response and 
+        non-empty reply, set the device to Ready with the response and
         sender info. If it returns an empty reply, clear the device state.
         If it raises an error, also clear the device and clear the device's
         backlog too, and then re-raise.
         """
         device.updateStateOnServer("status", "Processing")
 
-        info = {"device_id": device.id}
-        info.update(sender_info)
-        user = ReturnAddress(info=info).freeze()
         try:
-            self.debugLog("Processing message: '{0}' From user {1}".format(
-                message, user))
-            reply = self.bot.reply(user, message)
-            self.debugLog("Chatbot response: '{0}'".format(reply))
+            log.debug("Processing message: '{0}' From user {1}".format(
+                message, sender_info["name"]))
+            reply = self.bot.reply(sender_info["name"], sender_info, message)
+            log.debug("Chatbot response: '{0}'".format(reply))
         except Exception:
             # kill any backlog, so as not to add to the confusion
             del self.device_info[device.id][:]
@@ -279,6 +320,7 @@ class Plugin(indigo.PluginBase):
         if reply:
             device.updateStateOnServer("message", message)
             device.updateStateOnServer("response", reply)
+            device.updateStateOnServer("name", sender_info["name"])
             for k in _SENDER_INFO_FIELDS:
                 device.updateStateOnServer(k, sender_info[k])
             device.updateStateOnServer("status", "Ready")
@@ -305,38 +347,3 @@ class Plugin(indigo.PluginBase):
             if device.states["status"] == "Ready":
                 return
         self.clear_device_state(device)
-
-
-class ReturnAddress(object):
-    """ A return address for chatbot replies.
-
-    Public instance methods:
-        freeze() - Returns itself as a frozenset, so it can be used as a key
-                   in dictionaries, as long as you didn't put anything
-                   other than hashable values in the info dictionary
-                   passed to the constructor
-
-    Public instance variables:
-        info - dictionary
-    """
-    def __init__(self, **kwargs):
-        """ Construct a ReturnAddress object.
-        named parameters:
-            info - a dictionary of information identifying the user
-            frozen - a frozen ReturnAddress object to be thawed
-
-        You must supply either frozen or info, but not both, or an error
-        will be raised.
-        """
-        if "frozen" in kwargs:
-            items = [x for x in kwargs.pop("frozen")]
-            self.info = dict([tup for tup in items])
-        elif "info" in kwargs:
-            self.info = kwargs.pop("info")
-        else:
-            raise(TypeError, "One argument is required")
-        if kwargs:
-            raise(TypeError, "Unexpected keyword argument")
-
-    def freeze(self):
-        return frozenset(self.info.items())

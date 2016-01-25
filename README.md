@@ -29,6 +29,8 @@ To get a chat going, you'll need another plugin that can send and receive messag
 
 For the first action item in the trigger, choose the Chatbot action Get Chatbot Response, choose the Chatbot Responder Device you made earlier, and Edit Action Settings. In the Message field of the configuration dialog, enter %%d:00000000:message%%, except instead of 00000000 use the numeric id of the Messages App device. This if you haven't seen it is Indigo's device substitution syntax. When the action is executed, Indigo will look up the state named "message" on your device and substitute that in instead.
 
+In the Name field of the configuration dialog, put %%d:00000000:name%%, once again substituting the Messages App device's numeric id. This will give you the Messages App's best guess as to the real name for your contact. You could also type in whatever you want here, but you have to have something, because this field is the one the chatbot uses to identify who it's talking to.
+
 The Action configuration has three boxes for "Sender Info". For a Messages App device which is not set to "All Senders" you don't need to put anything here.
 
 To complete your trigger, add a second action that marks the message as read. It's a good idea to add a small delay here, because Indigo Server doesn't always execute your trigger actions in the order you think it's going to, and you don't want the Messages plugin to clear the message on its device before the Chatbot fetches it.
@@ -71,13 +73,14 @@ Have a look at the scripts in example_scripts. There is also some incomplete but
 
 ### Scripting the Chatbot Plugin
 
-Let's say for example that 12345678 is the device id of a Chatbot Responder device, and that serviceName and handleName are variables containing the service and handle of the person on Messages who you would like the response to be sent to. Then you can do this:
+Let's say for example that 12345678 is the device id of a Chatbot Responder device, and that userName, serviceName and handleName are variables containing the name, service and handle of the person on Messages who you would like the response to be sent to. Then you can do this:
 
 ```py
 chatbotId = "me.gazally.indigoplugin.chatbot"
 chatbotPlugin = indigo.server.getPlugin(chatbotId)
 if chatbotPlugin.isEnabled():
     props = {"message" : "This is the message my script would like a response to.",
+             "name"  : userName,
              "info1" : serviceName,
              "info2" : handleName,
              "info3" : ""}
@@ -101,7 +104,7 @@ if chatbotPlugin.isEnabled():
 
 ### What does the future hold? Some ideas.
 
-The chatbot engine waits for rule methods to finish. Rules need to be run in separate threads or maybe separate processes.
+The chatbot engine waits for rule methods to finish. Rules could be run in separate threads or maybe separate processes. This would probably mean creating per-user instances of Script objects.
 
 It would be nice to have a mechanism for asynchronous replies, so that based on things that happen in Indigo, the chatbot engine could be triggered to send unprompted messages, using address information it has saved. Currently you could do that by having a trigger ask for a reply to a message the user didn't actually send. But the logic seems convoluted. The whole area needs some thought.
 
@@ -109,21 +112,19 @@ There are internal state variables for the chatbot scripts. These could be saved
 
 It's kind of disconcerting how fast replies arrive. Perhaps a typing delay simulator would help.
 
-By the time a message gets to the chatbot engine, all the chatbot knows about who it is from is the device number plus the three Sender Info fields. Adding a field for the sender's real name would be useful for logging and script logic. 
-
-Import all Indigo variable names, device names, action group names, etc... into variables for chatbot scripts to use.
-
 Better tokenizing of numbers and numeric expressions.
 
 Let scripts supply a list of substitutions to be made in the tokenizer, instead of or in addition to a substitute function.
 
 Parsing of time expressions. "Turn off the basement lights in an hour" and "Turn off the basement lights at 3:30" should be handled by the same rule.
 
-Could define an exception that rules could raise if they look at the match dictionary and decide it doesn't make sense, and then the engine would search for the next rule that matches. If I do this, I'm going to call the exception Punt.
+Could define an exception that rules could raise if they look at the match dictionary and decide it doesn't make sense, and then the engine would search for the next rule that matches.
 
-Add wildcard syntax to match anything except a list of supplied words. For example: "I *~3!(hate|not) cookies"
+Add wildcard syntax to match anything except a list of supplied words. For example: "i *~3!(hate|not) cookies"
 
 Make case-sensitive matching an option?
+
+Maybe look for __init__.py in the scripts directory and import it as one module if found. This would let script writers control their import order.
 
 ### What are some known issues
 
@@ -131,4 +132,3 @@ If you don't put any rules in the default topic, "all", the chatbot won't deal w
 
 Rule methods that take a long time will block the chatbot from responding to anyone else.
 
-Eliza lost her memory once, and I haven't been able to reproduce it.

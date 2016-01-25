@@ -80,6 +80,7 @@ from __future__ import unicode_literals
 
 import inspect
 import itertools
+import logging
 import re
 
 from chatbot_reply.six import text_type, next
@@ -95,7 +96,7 @@ _SPACE_SCORE = 0
 _WORD_SCORE = 10
 _VARIABLE_SCORE = 10
 
-
+log = logging.getLogger(__name__)
 
 class StopScanLoop(StopIteration):
     pass
@@ -575,10 +576,9 @@ class ParsedPattern(object):
  
 class Pattern(object):
 
-    def __init__(self, raw, alternates=None, simple=False, say=print):
+    def __init__(self, raw, alternates=None, simple=False):
         self.raw = raw
         self.alternates = alternates
-        self._say = say
         if self.raw:
             self._parse_tree = ParsedPattern(raw, simple=simple)
             self.formatted_pattern = self._parse_tree.format()
@@ -601,7 +601,7 @@ class Pattern(object):
             regex = self.regex(alternates)
             return re.compile(regex, flags=re.UNICODE)
         except PatternVariableNotFoundError as e:
-            self._say("[Pattern] " + e.args[0] +
+            log.debug("[Pattern] " + e.args[0] +
                       ' in "{0}"'.format(self.formatted_pattern) +
                       ", failed to cache regex")
             return None
@@ -619,13 +619,13 @@ class Pattern(object):
             try:
                 regex = self.regex(allvars)
             except PatternVariableNotFoundError as e:
-                self._say("[Pattern] " + e.args[0] +
+                log.debug( e.args[0] +
                           ' in "{0}"'.format(self.formatted_pattern) +
                           ", match failed")
                 return None
             m = re.match(regex, string, flags=re.UNICODE)
         if m is not None:
-            self._say('[Pattern] "' + self.formatted_pattern +
+            log.debug(self.formatted_pattern +
                       '" matched "' + string + '"')
                      
         return m

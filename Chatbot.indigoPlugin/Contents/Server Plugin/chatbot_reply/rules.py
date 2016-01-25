@@ -10,12 +10,15 @@ from __future__ import unicode_literals
 import bisect
 import imp
 import inspect
+import logging
 import os
 
 from chatbot_reply.constants import _PREFIX
 from chatbot_reply.exceptions import *
 from chatbot_reply.patterns import Pattern
 from chatbot_reply.script import Script, ScriptRegistrar
+
+log = logging.getLogger(__name__)
 
 class RulesDB(object):
     """ Rules Database object. Reads directories of python files, and 
@@ -33,12 +36,8 @@ class RulesDB(object):
     script_instances: List containing one instance of each Script subclass
         found, except for those with their topic set to None
     """
-    def __init__(self, say=print):
-        """ Create a new empty RulesDB object. The say argument is a function
-        to call with debug output, which defaults to print, but may also be
-        set to None if you don't want to see any debug output. 
-        """
-        self._say = say if say is not None else lambda s:s
+    def __init__(self):
+        """ Create a new empty RulesDB object """
         self.clear_rules()
 
     def clear_rules(self):
@@ -49,29 +48,28 @@ class RulesDB(object):
 
     def _new_topic(self, topic):
         """ Add a new topic to the rules database. """
-        self.topics[topic] = Topic(self._say)
+        self.topics[topic] = Topic()
  
     def load_script_directory(self, directory, botvars):
         """Iterate through the .py files in a directory, and import all of
         them. Then look for subclasses of Script and search them for
         rules, and load those into self.topics.
         botvars is a dictionary that loaded scripts can use to initialize
-        chatobt state
+        chatbot state
 
         """
         self.rules_sorted = False
         ScriptRegistrar.clear()
-        Script.botvars = botvars
         
         for item in os.listdir(directory):
             if item.lower().endswith(".py"):
-                self._say("Importing " + item)
+                log.debug("Importing " + item)
                 filename = os.path.join(directory, item)
                 self._import(filename)
 
         for cls in ScriptRegistrar.registry:
-            self._say("Loading scripts from " + cls.__name__)
-            self._add_to_rulesdb(cls)
+            log.debug("Loading scripts from " + cls.__name__)
+            self._add_to_rulesdb(cls, botvars)
 
         if sum([len(t.rules) for k, t in self.topics.items()]) == 0:
             raise NoRulesFoundError(
@@ -86,13 +84,13 @@ class RulesDB(object):
         path, name = os.path.split(filename)
         name, ext = os.path.splitext(name)
 
-        self._say("Reading " + filename)
+        log.debug("Reading " + filename)
         modname = _PREFIX + name
         file, filename, data = imp.find_module(name, [path])
         module = imp.load_module(modname, file, filename, data)
         return module
 
-    def _add_to_rulesdb(self, script_class):
+    def _add_to_rulesdb(self, script_class, botvars):
         """Given a subclass of Script, create an instance of it.  If it's
         topic is set to None, ignore it, otherwise search its
         attributes for methods that begin with "rule" or "substitute"
@@ -106,6 +104,7 @@ class RulesDB(object):
         if topic not in self.topics:
             self._new_topic(topic)
 
+        instance.botvars = botvars
         instance.setup()
         self.script_instances.append(instance)
         
@@ -154,8 +153,7 @@ class RulesDB(object):
         k = ""
         try:
             for k, v in alternates.items():
-                valid[k] = Pattern(v, simple=True,
-                                   say=self._say).formatted_pattern
+                valid[k] = Pattern(v, simple=True).formatted_pattern
         except Exception as e:
             msg = " in alternates"
             if k:
@@ -178,7 +176,7 @@ class RulesDB(object):
 
         raw_pattern, raw_previous, weight = argspec.defaults
         return Rule(raw_pattern, raw_previous, weight, alternates,
-                    method, rulename, say=self._say)
+                    method, rulename)
 
     def _load_substitution(self, script_class_name, instance, attribute):
         """ Given an instance of a class derived from Script and
@@ -198,15 +196,15 @@ class RulesDB(object):
                 updated = True
             topic.sort_rules()
         if updated:
-            self._say_all_rules()
+            self._log_all_rules()
 
-    def _say_all_rules(self):
+    def _log_all_rules(self):
         """ Print the rules lists to debug ouput """
-        self._say("-"*20 + "Sorted rules" + "-"*20)
+        log.debug("-"*20 + "Sorted rules" + "-"*20)
         for n, t in self.topics.items():
-            self._say("Topic: {0}".format(n))
-            t.say_sorted_rules()
-        self._say("-"*52)
+            log.debug("Topic: {0}".format(n))
+            t.log_sorted_rules()
+        log.debug("-"*52)
     
 
 def get_rule_method_spec(name, method):
@@ -260,11 +258,8 @@ class Topic(object):
         substitutions : List of substitution methods, in no particular
                 order. RulesDB puts tuples in here, (name, method)
     """
-    def __init__(self, say=None):
-        """ Create a new empty Topic object.
-        Argument: say - a function to use for debug and warning output, or None.
-        """
-        self._say = say if say is not None else lambda *args, **kwargs:args
+    def __init__(self):
+        """ Create a new empty Topic object. """
         self.rules = {}
         self.rules_are_sorted = True
         self.sortedrules = []
@@ -281,13 +276,12 @@ class Topic(object):
                    rule.previous.formatted_pattern)
             if tup in self.rules:
                 existing_rule = self.rules[tup]
-                self._say("Ignoring rule {0} because its patterns are "
+                log.warning("Ignoring rule {0} because its patterns are "
                           "duplicates of the patterns of the rule "
-                          "{1} ".format(rule.rulename, existing_rule.rulename),
-                          warning = "Warning")
+                          "{1} ".format(rule.rulename, existing_rule.rulename))
             else:
                 self.rules[tup] = rule
-                self._say('Loaded pattern "{0[0]}", previous="{0[1]}", ' 
+                log.debug('Loaded pattern "{0[0]}", previous="{0[1]}", ' 
                           'weight={1}, method={2}'.format(tup, rule.weight,
                                                            rule.rulename))
     def add_substitutions(self, substitutions):
@@ -301,10 +295,10 @@ class Topic(object):
         self.sortedrules = sorted(self.rules.values(), reverse=True)
         self.rules_are_sorted = True
 
-    def say_sorted_rules(self):
-        """ Print sorted rules to debug output """
+    def log_sorted_rules(self):
+        """ Print sorted rules to logging output """
         for r in self.sortedrules:
-            self._say('({2}) "{0}"/"{1}"'.format(
+            log.debug('({2}) "{0}"/"{1}"'.format(
                 r.pattern.formatted_pattern,
                 r.previous.formatted_pattern, r.weight))
         
@@ -331,7 +325,7 @@ class Rule(object):
             score of the two patterns
     """
     def __init__(self, raw_pattern, raw_previous, weight, alternates,
-                 method, rulename, say=None):
+                 method, rulename):
         """ Create a new Rule object based on information supplied to the
         @rule decorator. Arguments:
         raw_pattern - simplified regular expression string supplied to @rule
@@ -342,9 +336,6 @@ class Rule(object):
         method - reference to method decorated by @rule
         rulename - modulename.classname.methodname, used to make better
                  error messages
-        say - a function that takes a string, for debug output, and a warning
-              keyword parameter, which is used if duplicate rules are found.
-              Defaults to None.
 
         Raises PatternError, PatternVariableNotFoundError, 
                PatternVariableValueError
@@ -353,9 +344,9 @@ class Rule(object):
             previous = ""
             if not raw_pattern:
                 raise PatternError("Empty string found")
-            self.pattern = Pattern(raw_pattern, alternates, say=say)
+            self.pattern = Pattern(raw_pattern, alternates)
             previous = "previous "
-            self.previous = Pattern(raw_previous, alternates, say=say)
+            self.previous = Pattern(raw_previous, alternates)
         except (TypeError, PatternError, PatternVariableValueError,\
                PatternVariableNotFoundError) as e: 
             msg = " in {0}pattern of {1}".format(previous, rulename)
@@ -365,7 +356,6 @@ class Rule(object):
         self.weight = weight
         self.method = method
         self.rulename = rulename
-        self._say = say if say is not None else lambda *args, **kwargs:args
 
     def match(self, target, history, variables):
         """ Return a Match object if the targets match the patterns

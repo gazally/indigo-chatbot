@@ -51,12 +51,13 @@ class InteractivePlugin(object):
     def messageLoop(self):
         action = Mock()
         action.props = {"send_method":None, "message_field":None,
-                        "actionVersion":self.plugin_module._VERSION}
+                        "name":"local"}
         dev = DeviceForTest(1, "dev", {})
         action.deviceId = dev.id
         self.indigo_mock.devices[dev.id] = dev
         self.plugin.deviceStartComm(dev)
         print ("Type /quit to quit, /debug to toggle debug output, "
+               "/debugbot to toggle chatbot debug output, "
                "/botvars or /uservars to see values of variables, "
                "/reload to reload the scripts directory.")
         
@@ -76,6 +77,8 @@ class InteractivePlugin(object):
                 self.plugin.bot.load_script_directory(self.path)
             elif msg == "/debug":
                 self.plugin.toggleDebugging()
+            elif msg == "/debugbot":
+                self.plugin.toggleEngineDebugging()
             else:
                 action.props[u"message"] = unicode(msg)
                 self.plugin.getChatbotResponse(action)

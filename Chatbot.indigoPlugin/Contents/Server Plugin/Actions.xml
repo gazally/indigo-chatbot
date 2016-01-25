@@ -10,6 +10,9 @@
       <Field id="message" type="textfield" default="">
 	<Label>Message:</Label>
       </Field>
+      <Field id="name" type="textfield" default="">
+	<Label>From:</Label>
+      </Field>
       <Field id="sep1" type="separator"/>
       <Field id="header1" type="label">
 	<Label>Save any information you want to keep about the sender here:</Label>

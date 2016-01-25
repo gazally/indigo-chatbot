@@ -6,15 +6,13 @@
 """ chatbot_reply.script, defines decorators and superclass for chatbot scripts 
 """
 from __future__ import unicode_literals
+import collections
 from functools import wraps
-import inspect
 import random
 import re
 
 from chatbot_reply.six import with_metaclass
-
-from chatbot_reply.exceptions import *
-from chatbot_reply.constants import _PREFIX
+from chatbot_reply.constants import _HISTORY, _PREFIX
 
 def rule(pattern_text, previous_reply="", weight=1):
     """ decorator for rules in subclasses of Script """
@@ -106,12 +104,14 @@ class Script(with_metaclass(ScriptRegistrar, object)):
     Child classes may overload self.choose and self.process_reply if they would
     like different behavior.
 
-    Public class attributes that are meant to be used but not modified by
-    child classes:
+    Public instance variables that are meant to be used by child classes,
+    but not modified (with the exception that it's ok to change, add and
+    delete things in the variable dictionaries, just not the dictionary
+    objects themselves):
     botvars - dictionary of variable names and values that are global for
         all users of the chatbot engine
     uservars - dictionary of variable names and values for the current user
-    user - hashable value representing the current user
+    userinfo - UserInfo object containing info about the sender
     match - a Match object (see rules.py) representing the relationship between
         the matched user input (and previous reply, if applicable) and the 
         rule's patterns
@@ -123,22 +123,22 @@ class Script(with_metaclass(ScriptRegistrar, object)):
     """
     topic = "all"
 
-    botvars = None
-    uservars = None
-    user = None
-    match = None
-    current_topic = None
+    def __init__(self):
+        self.botvars = None
+        self.userinfo = None
+        self.match = None
 
-    @classmethod
-    def set_user(cls, user, uservars):
-        """ set class attributes associated with a user """
-        cls.uservars = uservars
-        cls.user = user
-    
-    @classmethod
-    def set_topic(cls, new_topic):
-        """ change the current topic """
-        cls.current_topic = new_topic
+    @property
+    def uservars(self):
+        return self.userinfo.vars
+
+    def ct_get(self):
+        return self.userinfo.topic_name
+
+    def ct_set(self, newtopic):
+        self.userinfo.topic_name = newtopic
+
+    current_topic = property(ct_get, ct_set)
     
     def setup(self):
         """ placeholder """
@@ -183,7 +183,25 @@ class Script(with_metaclass(ScriptRegistrar, object)):
         thing this does is use built-in string formatting to substitute in the 
         match results.
         """
-        return string.format(*[], **Script.match)
+        return string.format(*[], **self.match)
+
+    
+class UserInfo(object):
+    """ A class for stashing per-user information. Public instance variables:
+    vars: a dictionary of variable names and values
+    info: a dictionary of information about the user
+    topic_name: the name of the topic the user is currently in
+    msg_history: a deque containing Targets for a few recent messages
+    repl_history: a deque containing Targets for a few recent replies
+    """
+    def __init__(self, info):
+        self.vars = {}
+        self.info = info
+        self.topic_name = "all"
+        self.msg_history = collections.deque(maxlen=_HISTORY)
+        self.repl_history = collections.deque(maxlen=_HISTORY)
+
+    
     
 #### a couple of useful utility functions for writers of substitute methods
 

@@ -131,14 +131,13 @@ class PluginTestCase(IndigoMockTestCase):
 
     def test_DebugMenuItem_Toggles(self):
         self.assertFalse(self.plugin.debug)
-        self.plugin.debugLog = Mock()
-        
+        self.plugin.debugLog.reset_mock()
         self.plugin.toggleDebugging()
         self.assertEqual(self.plugin.debugLog.call_count, 1)
         self.assertTrue(self.plugin.debug)
 
         self.plugin.toggleDebugging()
-        self.assertEqual(self.plugin.debugLog.call_count, 2)
+        self.assertEqual(self.plugin.debugLog.call_count, 3)
         self.assertFalse(self.plugin.debug)
              
     def test_PreferencesUIValidation_Succeeds(self):
@@ -156,7 +155,8 @@ class PluginTestCase(IndigoMockTestCase):
         self.asserts_for_UIValidation_Failure("scriptsPath", tup)
 
     def test_ActionUIValidation_Succeeds_OnValidInput(self):
-        values = {"message":"Hi", "actionVersion":_VERSION,
+        values = {"message":"Hi", "name": "test",
+                  "actionVersion":_VERSION,
                   "info1":"", "info2":"", "info3":""}
         tup = self.plugin.validateActionConfigUi(values, "getChatbotResponse", 1)
         self.assertEqual(len(tup), 2)
@@ -165,6 +165,7 @@ class PluginTestCase(IndigoMockTestCase):
 
     def test_ActionUIValidation_Corrects_OldVersion(self):
         values = {"message":"Hi", "actionVersion":"0.0",
+                  "name":"test",
                   "info1":"", "info2":"", "info3":""}
         tup = self.plugin.validateActionConfigUi(values, "getChatbotResponse", 1)
         self.assertEqual(values["actionVersion"],
@@ -175,12 +176,14 @@ class PluginTestCase(IndigoMockTestCase):
 
     def test_ActionUIValidation_Fails_OnEmptyMessage(self):
         values = {"message":"", "actionVersion":_VERSION,
+                  "name":"test",
                   "info1":"", "info2":"", "info3":""}
         tup = self.plugin.validateActionConfigUi(values, "getChatbotResponse", 1)
         self.asserts_for_UIValidation_Failure("message", tup)
 
     def test_ActionUIValidation_Fails_OnFailedSubstitutionCheck(self):
         values = {"message":"Hi", "actionVersion":_VERSION,
+                  "name":"test",
                   "info1":"1", "info2":"2", "info3":"3"}
         fail_on = ""
         def sub(self, string, validateOnly):
@@ -205,8 +208,9 @@ class PluginTestCase(IndigoMockTestCase):
                                                 {"deviceVersion":_VERSION})
         states = dev.states
         self.assertEqual(len(states),
-                         3 + len(self.plugin_module._SENDER_INFO_FIELDS))
+                         4 + len(self.plugin_module._SENDER_INFO_FIELDS))
         self.assertEqual(states["message"], "")
+        self.assertEqual(states["name"], "")
         self.assertEqual(states["status"], "Idle")
         for k in self.plugin_module._SENDER_INFO_FIELDS:
             self.assertEqual(states[k], "")
@@ -246,13 +250,15 @@ class PluginTestCase(IndigoMockTestCase):
         action.deviceId = dev.id
 
         test_message = "sensor wet"
-        action.props = {"message":test_message, "actionVersion":_VERSION}
+        action.props = {"message":test_message, "name":"test",
+                        "actionVersion":_VERSION}
         for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
             action.props[k] = "wet" + unicode(i)
         self.plugin.getChatbotResponse(action)
         
         self.assertEqual(dev.states["status"], "Ready")
         self.assertEqual(dev.states["message"], test_message)
+        self.assertEqual(dev.states["name"], "test")
         self.assertEqual(dev.states["response"], "Now the leak sensor is wet.")
         for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
             self.assertEqual(dev.states[k], "wet" + unicode(i))
@@ -268,6 +274,7 @@ class PluginTestCase(IndigoMockTestCase):
 
         self.assertEqual(dev.states["status"], "Ready")
         self.assertEqual(dev.states["message"], test_message)
+        self.assertEqual(dev.states["name"], "test")
         self.assertEqual(dev.states["response"], "Now the leak sensor is wet.")
         for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
             self.assertEqual(dev.states[k], "wet" + unicode(i))
@@ -280,6 +287,7 @@ class PluginTestCase(IndigoMockTestCase):
         self.plugin.clearResponse(action)
         self.assertEqual(dev.states["status"], "Ready")
         self.assertEqual(dev.states["message"], test_message2)
+        self.assertEqual(dev.states["name"], "test")
         self.assertEqual(dev.states["response"], "Now the leak sensor is dry.")
         for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
             self.assertEqual(dev.states[k], "dry" + unicode(i))
@@ -302,29 +310,6 @@ class PluginTestCase(IndigoMockTestCase):
         if tag:
             self.assertTrue(tag in errs)
             self.assertTrue(errs[tag])
-
-class ReturnAddressTestCase(IndigoMockTestCase):
-    def setUp(self):
-        IndigoMockTestCase.setUp(self)
-        self.RA = self.plugin_module.ReturnAddress
-
-    def tearDown(self):
-        IndigoMockTestCase.tearDown(self)
-
-    def testReturnAddress_Freezes_and_Thaws(self):
-        d = {"key":"value"}
-        ra = self.RA(info=d)
-
-        f = ra.freeze()
-        ra2 = self.RA(frozen=f)
-        self.assertEqual(len(ra2.info), 1)
-        self.assertEqual(ra2.info["key"], "value")
-
-    def testReturnAddress_Raises_OnIncorrectKwargs(self):
-        self.assertRaises(TypeError, self.RA)
-        f = self.RA(info={"key":"value"}).freeze()
-        self.assertRaises(TypeError, self.RA, frozen=f, foobar=None)
-        self.assertRaises(TypeError, self.RA, info={"key":"value"}, foobar="what")
 
 
 if __name__ == "__main__":

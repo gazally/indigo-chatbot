@@ -26,6 +26,11 @@
 	<TriggerLabel>Response:</TriggerLabel>
 	<ControlPageLabel>Response:</ControlPageLabel>
       </State>
+      <State id="name">
+	<ValueType>String</ValueType>
+	<TriggerLabel>Sender Name:</TriggerLabel>
+	<ControlPageLabel>Sender Name:</ControlPageLabel>
+      </State>
       <State id="info1">
 	<ValueType>String</ValueType>
 	<TriggerLabel>Sender Info 1:</TriggerLabel>
