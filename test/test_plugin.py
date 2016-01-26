@@ -46,7 +46,7 @@ class DeviceForTest(object):
     def refreshFromServer(self):
         pass
 
-        
+
 class IndigoMockTestCase(TestCase):
     """ Mock indigo so the plugin can be imported """
     def setUp(self):
@@ -65,13 +65,13 @@ class IndigoMockTestCase(TestCase):
 
     def tearDown(self):
         self.module_patcher.stop()
-        
+
 class PluginTestCase(IndigoMockTestCase):
     def setUp(self):
         IndigoMockTestCase.setUp(self)
         PluginBaseForTest.pluginPrefs = {u"showDebugInfo" : False}
         PluginBaseForTest.debugLog = Mock()
-        PluginBaseForTest.errorLog = Mock(side_effect=Exception("test"))
+        PluginBaseForTest.errorLog = Mock()
         PluginBaseForTest.sleep = Mock()
         PluginBaseForTest.substitute = substitute
 
@@ -94,31 +94,28 @@ class PluginTestCase(IndigoMockTestCase):
         return plugin
 
     def test_Startup_LogsError_OnNonexistantLoadPath(self):
-        PluginBaseForTest.errorLog.side_effect = None
         self.new_plugin(path="./doesnt_exist")
         self.assertTrue(PluginBaseForTest.errorLog.called)
 
     def test_Startup_LogsError_OnEmptyLoadPath(self):
-        PluginBaseForTest.errorLog.side_effect = None        
         self.new_plugin(path="./empty_directory")
         self.assertTrue(PluginBaseForTest.errorLog.called)
 
     def test_Startup_LogsError_OnBadPyFileInLoadPath(self):
-        PluginBaseForTest.errorLog.side_effect = None        
         self.new_plugin(path="./syntax_error")
         self.assertTrue(PluginBaseForTest.errorLog.called)
 
     def test_Startup_Succeeds(self):
         self.plugin.startup()
-        pass
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_Shutdown_Succeeds(self):
         self.plugin.shutdown()
-        pass
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_Update_Succeeds(self):
         self.plugin.update()
-        pass
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_RunConcurrentThread_Exits_OnStopThread(self):
         self.plugin.StopThread = Exception
@@ -128,6 +125,7 @@ class PluginTestCase(IndigoMockTestCase):
         t.start()
         t.join(0.1)
         self.assertFalse(t.is_alive(), "I'm in an infinite loop!")
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_DebugMenuItem_Toggles(self):
         self.assertFalse(self.plugin.debug)
@@ -139,7 +137,8 @@ class PluginTestCase(IndigoMockTestCase):
         self.plugin.toggleDebugging()
         self.assertEqual(self.plugin.debugLog.call_count, 3)
         self.assertFalse(self.plugin.debug)
-             
+        self.assertFalse(PluginBaseForTest.errorLog.called)
+
     def test_PreferencesUIValidation_Succeeds(self):
         values = {"showDebugInfo" : True, "scriptsPath":"./test_scripts"}
         ok, d = self.plugin.validatePrefsConfigUi(values)
@@ -147,10 +146,10 @@ class PluginTestCase(IndigoMockTestCase):
         values = {"showDebugInfo" : False, "scriptsPath":"./test_scripts"}
         ok, d = self.plugin.validatePrefsConfigUi(values)
         self.assertTrue(ok)
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_PreferencesUIValidation_ReturnsErrorDict_OnBadLoadPath(self):
         values = {"showDebugInfo" : False, "scriptsPath" : "doesnt_exist"}
-        PluginBaseForTest.errorLog.side_effect = None
         tup = self.plugin.validatePrefsConfigUi(values)
         self.asserts_for_UIValidation_Failure("scriptsPath", tup)
 
@@ -162,6 +161,7 @@ class PluginTestCase(IndigoMockTestCase):
         self.assertEqual(len(tup), 2)
         ok, val = tup
         self.assertTrue(ok)
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_ActionUIValidation_Corrects_OldVersion(self):
         values = {"message":"Hi", "actionVersion":"0.0",
@@ -173,6 +173,7 @@ class PluginTestCase(IndigoMockTestCase):
         self.assertEqual(len(tup), 2)
         ok, val = tup
         self.assertTrue(ok)
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_ActionUIValidation_Fails_OnEmptyMessage(self):
         values = {"message":"", "actionVersion":_VERSION,
@@ -202,6 +203,7 @@ class PluginTestCase(IndigoMockTestCase):
         dev = DeviceForTest(1, "dev", {})
         self.plugin.deviceStartComm(dev)
         self.assertEqual(dev.pluginProps["deviceVersion"], _VERSION)
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_DeviceStartComm_Succeeds_OnValidInput(self):
         dev = self.make_and_start_a_test_device(1, "dev1",
@@ -214,20 +216,21 @@ class PluginTestCase(IndigoMockTestCase):
         self.assertEqual(states["status"], "Idle")
         for k in self.plugin_module._SENDER_INFO_FIELDS:
             self.assertEqual(states[k], "")
-                        
+        self.assertFalse(PluginBaseForTest.errorLog.called)
+
     def test_DeviceStopComm_Succeeds(self):
         dev = self.make_and_start_a_test_device(1, "d1",
                                                 {"deviceVersion":_VERSION})
         self.plugin.deviceStopComm(dev)
         self.assertFalse(dev.id in self.plugin.device_info)
-        
+        self.assertFalse(PluginBaseForTest.errorLog.called)
+
     def test_respond_LogsError_OnEmptyMessage(self):
         action = Mock()
-        action.props = {"message":"", "actionVersion":_VERSION} 
+        action.props = {"message":"", "actionVersion":_VERSION}
         dev = self.make_and_start_a_test_device(1, "d1",
                                                 {"deviceVersion":_VERSION})
         action.deviceId = dev.id
-        PluginBaseForTest.errorLog.side_effect = None
         self.plugin.getChatbotResponse(action)
         self.assertTrue(PluginBaseForTest.errorLog.called)
 
@@ -237,7 +240,6 @@ class PluginTestCase(IndigoMockTestCase):
         dev = self.make_and_start_a_test_device(1, "d1",
                                                 {"deviceVersion":_VERSION})
         action.deviceId = dev.id
-        PluginBaseForTest.errorLog.side_effect = None
         self.plugin.getChatbotResponse(action)
         self.assertTrue(PluginBaseForTest.errorLog.called)
 
@@ -255,7 +257,7 @@ class PluginTestCase(IndigoMockTestCase):
         for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
             action.props[k] = "wet" + unicode(i)
         self.plugin.getChatbotResponse(action)
-        
+
         self.assertEqual(dev.states["status"], "Ready")
         self.assertEqual(dev.states["message"], test_message)
         self.assertEqual(dev.states["name"], "test")
@@ -278,10 +280,10 @@ class PluginTestCase(IndigoMockTestCase):
         self.assertEqual(dev.states["response"], "Now the leak sensor is wet.")
         for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
             self.assertEqual(dev.states[k], "wet" + unicode(i))
-        
+
         self.assertEqual(len(self.plugin.device_info[dev.id]), 1)
 
-        # Now test that clearResponse fetches the backlog 
+        # Now test that clearResponse fetches the backlog
         action = Mock()
         action.deviceId = dev.id
         self.plugin.clearResponse(action)
@@ -296,7 +298,8 @@ class PluginTestCase(IndigoMockTestCase):
         # And clearResponse again should change state to Idle
         self.plugin.clearResponse(action)
         self.assertEqual(dev.states["status"], "Idle")
-        
+        self.assertFalse(PluginBaseForTest.errorLog.called)
+
     def make_and_start_a_test_device(self, dev_id, name, props):
         dev = DeviceForTest(dev_id, name, props)
         self.indigo_mock.devices[dev_id] = dev

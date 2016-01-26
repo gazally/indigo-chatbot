@@ -10,7 +10,6 @@ from __future__ import unicode_literals
 
 from distutils.version import StrictVersion
 import logging
-import traceback
 
 import indigo
 
@@ -20,8 +19,6 @@ _VERSION = "0.2"
 _SENDER_INFO_FIELDS = ["info1", "info2", "info3"]
 
 log = logging.getLogger()
-log_chatbot = logging.getLogger("chatbot_reply")
-
 
 class Plugin(indigo.PluginBase):
     """Chatbot plugin class for IndigoServer"""
@@ -49,7 +46,7 @@ class Plugin(indigo.PluginBase):
         if scripts_directory:
             self.load_scripts(scripts_directory)
         else:
-            log.error("Chatbot plugin is not configured.")
+            log.debug("Chatbot plugin is not configured.")
 
     def shutdown(self):
         log.debug("Shutdown called")
@@ -69,6 +66,11 @@ class Plugin(indigo.PluginBase):
     # ----- Logging Configuration ----- #
 
     def configure_logging(self):
+        """ Create a Handler subclass for the logging module that uses the
+        logging methods supplied to the plugin by Indigo. Use it for both
+        the plugin and the chatbot_reply module, and add a little formatting
+        to chatbot_reply's logger to distinguish the two in the log.
+        """
         def make_logging_handler(debugLog, errorLog):
             class NewHandler(logging.Handler):
                 def emit(self, record):
@@ -86,18 +88,21 @@ class Plugin(indigo.PluginBase):
         log.addHandler(h)
         log.setLevel(logging.DEBUG)
 
+        chatbot_logger = logging.getLogger("chatbot_reply")
         h_chatbot = make_logging_handler(self.debugLog, self.errorLog)
         f = logging.Formatter("[Engine] %(message)s")
         h_chatbot.setFormatter(f)
-        log_chatbot.addHandler(h_chatbot)
-        log_chatbot.propagate = False
+        chatbot_logger.addHandler(h_chatbot)
+        chatbot_logger.propagate = False
         self.set_chatbot_logging()
 
     def set_chatbot_logging(self):
+        """ Set the logging level for the chatbot_reply module's logger """
+        chatbot_logger = logging.getLogger("chatbot_reply")
         if self.debug_engine:
-            log_chatbot.setLevel(logging.DEBUG)
+            chatbot_logger.setLevel(logging.DEBUG)
         else:
-            log_chatbot.setLevel(logging.WARNING)
+            chatbot_logger.setLevel(logging.WARNING)
 
     # ----- Preferences UI ----- #
 
@@ -304,6 +309,11 @@ class Plugin(indigo.PluginBase):
         If it raises an error, also clear the device and clear the device's
         backlog too, and then re-raise.
         """
+        device.updateStateOnServer("message", message)
+        device.updateStateOnServer("response", "")
+        device.updateStateOnServer("name", sender_info["name"])
+        for k in _SENDER_INFO_FIELDS:
+            device.updateStateOnServer(k, sender_info[k])
         device.updateStateOnServer("status", "Processing")
 
         try:
@@ -318,11 +328,7 @@ class Plugin(indigo.PluginBase):
             raise
 
         if reply:
-            device.updateStateOnServer("message", message)
             device.updateStateOnServer("response", reply)
-            device.updateStateOnServer("name", sender_info["name"])
-            for k in _SENDER_INFO_FIELDS:
-                device.updateStateOnServer(k, sender_info[k])
             device.updateStateOnServer("status", "Ready")
         else:
             self.clear_device_state(device)
