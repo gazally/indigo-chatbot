@@ -1,5 +1,5 @@
 ## indigo-chatbot
-An Indigo Domotics plugin to enable natural language communication, in coordination with other plugins that connect to chat services.  This plugin is, optimistically, beta software. Please only use it if you don't mind using beta software.
+An Indigo Domotics plugin to enable natural language communication, in coordination with other plugins that connect to chat services.  This plugin is, optimistically, beta software. Please only use it if you don't mind using beta software, with bugs, API's that might change, and a developer who's too busy with real life to get back to you promptly.
 
 The chatbot engine in this plugin can be scripted using Python. User messages are matched against simplified regular expressions, which direct execution to rule methods in the scripts which can execute arbitrary Python code, communicate just like other Indigo Python scripts with IndigoServer, and then return text responses to send to the user. A rule method decorator is provided to keep rule declarations as concise as possible.
 
