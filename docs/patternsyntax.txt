@@ -1,0 +1,57 @@
+@rule("just some words")
+Matches Just some words, just some words?
+
+@rule("just [some] words")
+The some is optional
+
+@rule("using * wildcard")
+The * matches one or more words
+
+@rule("using [*] wildcard")
+The [*] matches zero or more words
+
+@rule("using *3 wildcard")
+This matches exactly three words
+
+@rule("using *~2 wildcard")
+This matches one or two words
+
+@rule("using [*~2] wildcard")
+Matches zero, one or two words
+
+@rule("i like %a:colors cars")
+matches one selection from the alternates list colors
+
+@rule("i have #1 cars")
+matches a single number
+
+@rule("my phone number is #2~3")
+would match "My phone number is 555-555-5555." or "My phone number is 555-5555"
+ASSUMING that you write a self.substitute() method to break input on hyphens,
+because the default tokenizer will give you 5555555555
+
+@rule("my name is $~3")
+matches 1-3 words containing only alphanumerics
+
+@rule("i like %u:uservar")
+matches whatever uservar is set to.
+uservar could contain a simplified pattern containing anything but a % or _ or
+wildcard
+variable names have to be alphanumeric and can't start with a number or
+underscore
+
+@rule("hey %b:botname")
+matches whatever botname is set to. works like %u:
+
+@rule("I like (red|blue|green) cars")
+matches "I like red cars" and "I like blue cars" and "I like green cars"
+
+@rule("My _* is _*")
+you can access memorized matches with self.match["match0"],
+self.match["match1"] etc. The original text is raw_match0, raw_match1
+_ can be used before variables, wildcards, alternates and optionals
+
+Possible future syntax:
+@rule("I *~3!(hate|not) cookies")
+matches 1-3 words, as long as none of them are "hate" or "not"
+

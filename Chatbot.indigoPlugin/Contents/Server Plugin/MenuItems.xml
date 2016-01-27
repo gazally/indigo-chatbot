@@ -6,8 +6,16 @@
 	 back to the user you can post information into the Event Log.
 -->
 <MenuItems>
-	<MenuItem id="toggleDebugging">
-		<Name>Toggle Debugging</Name>
-        <CallbackMethod>toggleDebugging</CallbackMethod>
-	</MenuItem>
+  <MenuItem id="toggleDebugging">
+    <Name>Toggle Debugging</Name>
+    <CallbackMethod>toggleDebugging</CallbackMethod>
+  </MenuItem>
+  <MenuItem id="toggleEngineDebugging">
+    <Name>Toggle Chatbot Engine Debugging</Name>
+    <CallbackMethod>toggleEngineDebugging</CallbackMethod>
+  </MenuItem>
+  <MenuItem id="reloadScripts">
+    <Name>Reload Script Files</Name>
+    <CallbackMethod>reloadScripts</CallbackMethod>
+  </MenuItem>
 </MenuItems>

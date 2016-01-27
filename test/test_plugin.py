@@ -15,27 +15,45 @@ from unittest import TestCase
 from mock import patch, Mock, MagicMock
 from threading import Thread
 
+_VERSION = "0.2"
+
 sys.path.append(os.path.abspath('../Chatbot.indigoPlugin/Contents/Server Plugin'))
 
 class PluginBaseForTest(object):
     def __init__(self, pid, name, version, prefs):
         self.pluginPrefs = prefs
 
-    
-def substitute(self, string, validateOnly=True):
+def substitute(self, string, validateOnly=False):
     if validateOnly:
         return (True, string)
     else:
         return string
 
+class DeviceForTest(object):
+    """ Mockup of indigo.device, for testing """
+    def __init__(self, dev_id, name, props):
+        self.id = dev_id
+        self.name = name
+        self.pluginProps = props
+        self.states = {}
+        self.configured = True
+    def updateStateOnServer(self, key=None, value=None, clearErrorState=True):
+        assert key is not None
+        assert value is not None
+        self.states[key] = value
+    def replacePluginPropsOnServer(self, props):
+        self.pluginProps = props
+    def refreshFromServer(self):
+        pass
+
+
 class IndigoMockTestCase(TestCase):
+    """ Mock indigo so the plugin can be imported """
     def setUp(self):
-        class JustLike_dict(dict):
-            """ make it so type(indigo.Dict()) != dict """
-            pass
         self.indigo_mock = MagicMock()
-        self.indigo_mock.Dict = JustLike_dict
+        self.indigo_mock.Dict = dict
         self.indigo_mock.PluginBase = PluginBaseForTest
+        self.indigo_mock.devices = {}
 
         modules = sys.modules.copy()
         modules["indigo"] = self.indigo_mock
@@ -47,7 +65,7 @@ class IndigoMockTestCase(TestCase):
 
     def tearDown(self):
         self.module_patcher.stop()
-        
+
 class PluginTestCase(IndigoMockTestCase):
     def setUp(self):
         IndigoMockTestCase.setUp(self)
@@ -69,10 +87,9 @@ class PluginTestCase(IndigoMockTestCase):
         # attribute" warnings, I think because tearDown is called,
         # removing the base class, before the plugin objects are deleted.
         # why this fixed it is a mystery to me
-        props = {u"showDebugInfo" : False,
-                 u"scriptsPath": path}
-        plugin = self.plugin_module.Plugin("What's", "here", "doesn't matter",
-                                         props)
+        props = {"showDebugInfo" : False,
+                 "scriptsPath": path}
+        plugin = self.plugin_module.Plugin("", "", "0.2", props)
         plugin.startup()
         return plugin
 
@@ -90,15 +107,15 @@ class PluginTestCase(IndigoMockTestCase):
 
     def test_Startup_Succeeds(self):
         self.plugin.startup()
-        pass
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_Shutdown_Succeeds(self):
         self.plugin.shutdown()
-        pass
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_Update_Succeeds(self):
         self.plugin.update()
-        pass
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_RunConcurrentThread_Exits_OnStopThread(self):
         self.plugin.StopThread = Exception
@@ -108,150 +125,186 @@ class PluginTestCase(IndigoMockTestCase):
         t.start()
         t.join(0.1)
         self.assertFalse(t.is_alive(), "I'm in an infinite loop!")
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_DebugMenuItem_Toggles(self):
         self.assertFalse(self.plugin.debug)
-        self.plugin.debugLog = Mock()
-        
+        self.plugin.debugLog.reset_mock()
         self.plugin.toggleDebugging()
         self.assertEqual(self.plugin.debugLog.call_count, 1)
         self.assertTrue(self.plugin.debug)
 
         self.plugin.toggleDebugging()
-        self.assertEqual(self.plugin.debugLog.call_count, 2)
+        self.assertEqual(self.plugin.debugLog.call_count, 3)
         self.assertFalse(self.plugin.debug)
-             
-    def test_PreferencesUIValidation_Succeeds(self):
-        values = {"showDebugInfo" : True}
-        ok, d = self.plugin.validatePrefsConfigUi(values)
-        self.assertTrue(ok)
-        values = {"showDebugInfo" : False}
-        ok, d = self.plugin.validatePrefsConfigUi(values)
-        self.assertTrue(ok)
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
-    def test_deviceListGenerator_Succeeds_OnValidInput(self):
-        dev = Mock()
-        dev.id = 1
-        dev.name = "dev"
-        dev.protocol = self.indigo_mock.kProtocol.Plugin = "foo"
-        self.indigo_mock.devices = [dev]
-        results = self.plugin.deviceListGenerator()
-        self.assertEqual(len(results), 2)
+    def test_PreferencesUIValidation_Succeeds(self):
+        values = {"showDebugInfo" : True, "scriptsPath":"./test_scripts"}
+        ok, d = self.plugin.validatePrefsConfigUi(values)
+        self.assertTrue(ok)
+        values = {"showDebugInfo" : False, "scriptsPath":"./test_scripts"}
+        ok, d = self.plugin.validatePrefsConfigUi(values)
+        self.assertTrue(ok)
+        self.assertFalse(PluginBaseForTest.errorLog.called)
+
+    def test_PreferencesUIValidation_ReturnsErrorDict_OnBadLoadPath(self):
+        values = {"showDebugInfo" : False, "scriptsPath" : "doesnt_exist"}
+        tup = self.plugin.validatePrefsConfigUi(values)
+        self.asserts_for_UIValidation_Failure("scriptsPath", tup)
 
     def test_ActionUIValidation_Succeeds_OnValidInput(self):
-        values = {u"message":u"Hi", "send_method":"send",
-                  "message_field":"msg", "fieldvalue1":"",
-                  "fieldname1":"", "fieldname2":"",
-                  "fieldvalue2":""}
-        tup = self.plugin.validateActionConfigUi(values, "", 1)
+        values = {"message":"Hi", "name": "test",
+                  "actionVersion":_VERSION,
+                  "info1":"", "info2":"", "info3":""}
+        tup = self.plugin.validateActionConfigUi(values, "getChatbotResponse", 1)
         self.assertEqual(len(tup), 2)
         ok, val = tup
         self.assertTrue(ok)
+        self.assertFalse(PluginBaseForTest.errorLog.called)
+
+    def test_ActionUIValidation_Corrects_OldVersion(self):
+        values = {"message":"Hi", "actionVersion":"0.0",
+                  "name":"test",
+                  "info1":"", "info2":"", "info3":""}
+        tup = self.plugin.validateActionConfigUi(values, "getChatbotResponse", 1)
+        self.assertEqual(values["actionVersion"],
+                         self.plugin_module._VERSION)
+        self.assertEqual(len(tup), 2)
+        ok, val = tup
+        self.assertTrue(ok)
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_ActionUIValidation_Fails_OnEmptyMessage(self):
-        values = {u"message":u"", "send_method":"send",
-                  "message_field":"mess", "fieldvalue1":"fv1",
-                  "fieldname1":"fn1", "fieldname2":"fn2",
-                  "fieldvalue2":"fv2"}
-        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
+        values = {"message":"", "actionVersion":_VERSION,
+                  "name":"test",
+                  "info1":"", "info2":"", "info3":""}
+        tup = self.plugin.validateActionConfigUi(values, "getChatbotResponse", 1)
         self.asserts_for_UIValidation_Failure("message", tup)
-
-    def test_ActionUIValidation_Fails_OnNoMessage(self):
-        values = {u"send_method":"send",
-                  "message_field":"mess", "fieldvalue1":"fv1",
-                  "fieldname1":"fn1", "fieldname2":"fn2",
-                  "fieldvalue2":"fv2"}
-        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
-        self.asserts_for_UIValidation_Failure("message", tup)
-
-    def test_ActionUIValidation_Fails_OnMissingCallbackInfo(self):
-        values = {u"message":u"Hi", "send_method":"",
-                  "message_field":"", "fieldvalue1":"fv1",
-                  "fieldname1":"fn1", "fieldname2":"fn2",
-                  "fieldvalue2":"fv2"}
-        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
-        self.asserts_for_UIValidation_Failure("send_method", tup)
-        self.asserts_for_UIValidation_Failure("message_field", tup)
-
-    def test_ActionUIValidation_Fails_OnMissingFieldName(self):
-        values = {u"message":u"Hi", "send_method":"",
-                  "message_field":"", "fieldvalue1":"fv1",
-                  "fieldname1":"fn1", "fieldname2":"",
-                  "fieldvalue2":"fv2"}
-        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
-        self.asserts_for_UIValidation_Failure("fieldname2", tup)
 
     def test_ActionUIValidation_Fails_OnFailedSubstitutionCheck(self):
-        values = {u"message":u"Hi", "send_method":"send",
-                  "message_field":"mess", "fieldvalue1":"fv1",
-                  "fieldname1":"fn1", "fieldname2":"fn2",
-                  "fieldvalue2":"fv2"}
+        values = {"message":"Hi", "actionVersion":_VERSION,
+                  "name":"test",
+                  "info1":"1", "info2":"2", "info3":"3"}
         fail_on = ""
         def sub(self, string, validateOnly):
             if validateOnly:
                 return (string != values[fail_on], string)
         PluginBaseForTest.substitute = sub
         fail_on = "message"
-        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
+        tup = self.plugin.validateActionConfigUi(values, "getChatbotResponse", 1)
         self.asserts_for_UIValidation_Failure("message", tup)
 
-        fail_on = "fieldvalue2"
-        tup = self.plugin.validateActionConfigUi(values, u"respondToMessage", 1)
-        self.asserts_for_UIValidation_Failure("fieldvalue2", tup)
+        fail_on = "info3"
+        tup = self.plugin.validateActionConfigUi(values, "getChatbotResponse", 1)
+        self.asserts_for_UIValidation_Failure("info3", tup)
+
+    def test_DeviceStartComm_Fixes_DeviceVersion(self):
+        dev = DeviceForTest(1, "dev", {})
+        self.plugin.deviceStartComm(dev)
+        self.assertEqual(dev.pluginProps["deviceVersion"], _VERSION)
+        self.assertFalse(PluginBaseForTest.errorLog.called)
+
+    def test_DeviceStartComm_Succeeds_OnValidInput(self):
+        dev = self.make_and_start_a_test_device(1, "dev1",
+                                                {"deviceVersion":_VERSION})
+        states = dev.states
+        self.assertEqual(len(states),
+                         4 + len(self.plugin_module._SENDER_INFO_FIELDS))
+        self.assertEqual(states["message"], "")
+        self.assertEqual(states["name"], "")
+        self.assertEqual(states["status"], "Idle")
+        for k in self.plugin_module._SENDER_INFO_FIELDS:
+            self.assertEqual(states[k], "")
+        self.assertFalse(PluginBaseForTest.errorLog.called)
+
+    def test_DeviceStopComm_Succeeds(self):
+        dev = self.make_and_start_a_test_device(1, "d1",
+                                                {"deviceVersion":_VERSION})
+        self.plugin.deviceStopComm(dev)
+        self.assertFalse(dev.id in self.plugin.device_info)
+        self.assertFalse(PluginBaseForTest.errorLog.called)
 
     def test_respond_LogsError_OnEmptyMessage(self):
         action = Mock()
-        action.props = {"message":""}
-        self.plugin.respondToMessage(action)
+        action.props = {"message":"", "actionVersion":_VERSION}
+        dev = self.make_and_start_a_test_device(1, "d1",
+                                                {"deviceVersion":_VERSION})
+        action.deviceId = dev.id
+        self.plugin.getChatbotResponse(action)
         self.assertTrue(PluginBaseForTest.errorLog.called)
 
-    def test_respond_LogsError_OnBadDevice(self):
+    def test_respond_LogsError_OnBadVersion(self):
         action = Mock()
-        action.props = {"message": "status", "message_field":"m",
-                        "device" : 1, "send_method": "send",
-                        "fieldname1": "f1", "fieldvalue1":"v1",
-                        "fieldname2": "f2", "fieldvalue2":"v2"}
-        m = Mock()
-        m.protocol = "protocol"
-        self.indigo_mock.kProtocol.Plugin = "something else"
-        m.isEnabled.return_value = True
-        self.indigo_mock.devices.__contains__.return_value = True
-        self.indigo_mock.devices.__getitem__.return_value = m
-        self.indigo_mock.server.getPlugin.return_value = m
-        self.plugin.respondToMessage(action)
+        action.props = {"message":"status", "actionVersion":"0.1"}
+        dev = self.make_and_start_a_test_device(1, "d1",
+                                                {"deviceVersion":_VERSION})
+        action.deviceId = dev.id
+        self.plugin.getChatbotResponse(action)
+        self.assertTrue(PluginBaseForTest.errorLog.called)
 
-    def test_respond_LogsError_OnDisabledPlugin(self):
-        action = Mock()
-        action.props = {"message": "status", "message_field":"m",
-                        "device" : 1, "send_method": "send",
-                        "fieldname1": "f1", "fieldvalue1":"v1",
-                        "fieldname2": "f2", "fieldvalue2":"v2"}
-        m = Mock()
-        m.protocol = self.indigo_mock.kProtocol.Plugin = "protocol"
-        m.isEnabled.return_value = False
-        self.indigo_mock.devices.__contains__.return_value = True
-        self.indigo_mock.devices.__getitem__.return_value = m
-        self.indigo_mock.server.getPlugin.return_value = m
-        self.plugin.respondToMessage(action)
+    def test_respondToMessageAndClearResponse_Succeed_OnValidInput(self):
+        dev = self.make_and_start_a_test_device(1, "d1",
+                                                {"deviceVersion":_VERSION})
+        self.assertEqual(dev.states["status"], "Idle")
 
-    def test_respond_Succeeds_WithNoReturnAddress(self):
         action = Mock()
-        action.props = {"message": "status", "device": 0}
-        self.plugin.respondToMessage(action)
+        action.deviceId = dev.id
 
-    def test_respond_Succeeds_OnValidInput(self):
+        test_message = "sensor wet"
+        action.props = {"message":test_message, "name":"test",
+                        "actionVersion":_VERSION}
+        for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
+            action.props[k] = "wet" + unicode(i)
+        self.plugin.getChatbotResponse(action)
+
+        self.assertEqual(dev.states["status"], "Ready")
+        self.assertEqual(dev.states["message"], test_message)
+        self.assertEqual(dev.states["name"], "test")
+        self.assertEqual(dev.states["response"], "Now the leak sensor is wet.")
+        for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
+            self.assertEqual(dev.states[k], "wet" + unicode(i))
+
+        # Because the setup is already done, test that getChatbotResponse adds to
+        # the backlog when there is already a response waiting
+
+        test_message2 = "sensor dry"
+        action.props["message"] = test_message2
+        for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
+            action.props[k] = "dry" + unicode(i)
+        self.plugin.getChatbotResponse(action)
+
+        self.assertEqual(dev.states["status"], "Ready")
+        self.assertEqual(dev.states["message"], test_message)
+        self.assertEqual(dev.states["name"], "test")
+        self.assertEqual(dev.states["response"], "Now the leak sensor is wet.")
+        for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
+            self.assertEqual(dev.states[k], "wet" + unicode(i))
+
+        self.assertEqual(len(self.plugin.device_info[dev.id]), 1)
+
+        # Now test that clearResponse fetches the backlog
         action = Mock()
-        action.props = {"message": "status", "message_field":"m",
-                        "device" : 1, "send_method": "send",
-                        "fieldname1": "f1", "fieldvalue1":"v1",
-                        "fieldname2": "f2", "fieldvalue2":"v2"}
-        m = Mock()
-        m.protocol = self.indigo_mock.kProtocol.Plugin = "protocol"
-        m.isEnabled.return_value = True
-        self.indigo_mock.devices.__contains__.return_value = True
-        self.indigo_mock.devices.__getitem__.return_value = m
-        self.indigo_mock.server.getPlugin.return_value = m
-        self.plugin.respondToMessage(action)
+        action.deviceId = dev.id
+        self.plugin.clearResponse(action)
+        self.assertEqual(dev.states["status"], "Ready")
+        self.assertEqual(dev.states["message"], test_message2)
+        self.assertEqual(dev.states["name"], "test")
+        self.assertEqual(dev.states["response"], "Now the leak sensor is dry.")
+        for i, k in enumerate(self.plugin_module._SENDER_INFO_FIELDS):
+            self.assertEqual(dev.states[k], "dry" + unicode(i))
+        self.assertEqual(self.plugin.device_info[dev.id], [])
+
+        # And clearResponse again should change state to Idle
+        self.plugin.clearResponse(action)
+        self.assertEqual(dev.states["status"], "Idle")
+        self.assertFalse(PluginBaseForTest.errorLog.called)
+
+    def make_and_start_a_test_device(self, dev_id, name, props):
+        dev = DeviceForTest(dev_id, name, props)
+        self.indigo_mock.devices[dev_id] = dev
+        self.plugin.deviceStartComm(dev)
+        return dev
 
     def asserts_for_UIValidation_Failure(self, tag, tup):
         self.assertEqual(len(tup), 3)
@@ -261,44 +314,6 @@ class PluginTestCase(IndigoMockTestCase):
             self.assertTrue(tag in errs)
             self.assertTrue(errs[tag])
 
-class ReturnAddressTestCase(IndigoMockTestCase):
-    def setUp(self):
-        IndigoMockTestCase.setUp(self)
-        self.RA = self.plugin_module.ReturnAddress
 
-    def tearDown(self):
-        IndigoMockTestCase.tearDown(self)
-
-    def testReturnAddress_Freezes_and_Thaws(self):
-        d = {"key":"value"}
-        ra = self.RA(d)
-        self.assertEqual(ra["key"], "value")
-        self.assertEqual(len(ra), 1)
-
-        f = ra.freeze()
-        ra2 = self.RA(f)
-        self.assertEqual(ra2["key"], "value")
-        self.assertEqual(len(ra2), 1)
-        self.assertEqual(f, ra2.freeze())
-
-    def testReturnAddress_SelectsItems_UsingFields(self):
-        d = {"key":"value", "name":"fred", "address":"home"}
-        ra = self.RA(d, ["name", "address"])
-        self.assertEqual(ra["name"], "fred")
-        self.assertEqual(ra["address"], "home")
-        self.assertEqual(len(ra), 2)
-
-    def testReturnAddress_ReturnsEmptyString_WhenItemMissing(self):
-        d = {"key":"value"}
-        ra = self.RA(d)
-        self.assertEqual(ra["not a key"], "")
-        self.assertEqual(len(ra), 1)
-
-    def testReturnAddress_Converts_ToIndigoDict(self):
-        d = {"key":"value"}
-        ra = self.RA(d)
-        self.assertEqual(type(ra.indigo_dict()), self.indigo_mock.Dict)
-
-        
 if __name__ == "__main__":
     unittest.main()

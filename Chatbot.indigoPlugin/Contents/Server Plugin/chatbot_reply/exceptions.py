@@ -19,7 +19,7 @@ class PatternVariableValueError(Exception):
     pass
 class NoRulesFoundError(Exception):
     """ Raised when ChatbotReply.load_script_directory fails to find any rules
-    decorated by @pattern in any classes derived from Script in any .py files
+    decorated by @rule in any classes derived from Script in any .py files
     in a directory. """
     pass
 class RecursionTooDeepError(Exception):
