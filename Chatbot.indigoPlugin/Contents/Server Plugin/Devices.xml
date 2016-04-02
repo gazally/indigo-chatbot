@@ -6,7 +6,7 @@
       <Field id="instructions" type="label">
 	<Label>This device will contact the chatbot engine and get a reply to a message.</Label>
       </Field>
-      <Field id="deviceVersion" type="textfield" hidden="true" defaultValue="0.2">
+      <Field id="deviceVersion" type="textfield" hidden="true" defaultValue="0.3.0">
 	<Label>Hidden device version</Label>
       </Field>
     </ConfigUI>

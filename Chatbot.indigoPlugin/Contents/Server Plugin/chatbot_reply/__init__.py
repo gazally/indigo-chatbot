@@ -19,9 +19,9 @@ except ImportError:
 
 logging.getLogger(__name__).addHandler(NullHandler())
 
-__all__      = ["ChatbotEngine", "Script", "rule", "UserInfo",
-                "PatternError", "PatternVariableNotFoundError",
-                "NoRulesFoundError", "RecursionTooDeepError",
-                "split_on_whitespace", "kill_non_alphanumerics"
-                ]
+__all__ = ["ChatbotEngine", "Script", "rule", "UserInfo", "PatternError",
+           "PatternVariableNotFoundError", "NoRulesFoundError",
+           "RecursionTooDeepError", "split_on_whitespace",
+           "kill_non_alphanumerics"]
+
 __version__ = "0.1.0"

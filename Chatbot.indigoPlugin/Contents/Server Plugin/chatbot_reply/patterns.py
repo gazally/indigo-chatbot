@@ -12,23 +12,23 @@
     Wildcards:
         *       match one or more words containing alphanumerics and
                 the underscore
-        @       match one or more words containing only alphabetic 
+        @       match one or more words containing only alphabetic
                 characters, not including underscore
         $       match one or more numbers containing only digits
- 
-             All three wildcard characters by themselves will match one or more 
-        words/numbers. They may all be modified by numbers representing a 
+
+             All three wildcard characters by themselves will match one or more
+        words/numbers. They may all be modified by numbers representing a
         minimum and/or maximum number of words to match:
 
         *2~     two or more
         *~10    one to ten
         *3~5    three to five
 
-        If you want to match zero to two words, do this: [*~2]. See Optionals 
+        If you want to match zero to two words, do this: [*~2]. See Optionals
     below.
 
     Spaces:
-        One or more whitespace characters in the pattern match one or more 
+        One or more whitespace characters in the pattern match one or more
         whitespace characters in the target.
 
     Words:
@@ -41,34 +41,34 @@
         %u:varname
 
         During regular expression construction, ParseTree.regex() will
-        look up variable values in 
+        look up variable values in
         a dictionary passed into it and substitute them into the regular
-        expression it is constructing. Variable names may contain 
-        alphanumerics including the underscore but may not begin with 
+        expression it is constructing. Variable names may contain
+        alphanumerics including the underscore but may not begin with
         a number or an underscore. Case in variable names is ignored.
         Variable values must be unicode strings, and will be parsed
         as even more simplified regular expression patterns, which may only
         contain Spaces, Words, Optionals, Alternates and Pipes.
 
     Optionals, Alternates and Pipes:
-        Any of the above expressions may be grouped together within 
+        Any of the above expressions may be grouped together within
         parentheses or square brackets, or a list of expressions separated
         by "|" characters may be placed within parentheses or square brackets.
-        Text within parentheses is required and within square brackets is 
+        Text within parentheses is required and within square brackets is
         optional. So:
- 
+
         (this|that)   will match either the string "this" or "that"
         [this|that]   will match either the empty string, "this", or "that"
         (thing [one|two])  will match "thing", "thing one" and "thing two"
 
     Memorization:
         Any wildcard, variable, or optional or alternate expression preceded
-        by an underscore will be made into a named group in the regular 
+        by an underscore will be made into a named group in the regular
         expression. They will be given the names "match0" through "matchn"
         in the order they are encountered in the pattern from left to right.
         For example:
 
-        my name is _@ [_@]   will match "My name is Fred" and 
+        my name is _@ [_@]   will match "My name is Fred" and
                              "My name is Fred Flintstone". The re.match
                              groupdict will contain "match0" and "match1",
                              and m.groupdict()["match1"] might be None.
@@ -87,8 +87,6 @@ from chatbot_reply.six import text_type, next
 from chatbot_reply.exceptions import *
 
 # TODO - could pass in a string such as "uba" with variable classes to create
-# TODO - make a parsetree class, use that instead of a list and put Token's two
-# static methods in it
 
 _WILDCARD_SCORE = -2
 _LIMITED_WILDCARD_SCORE = -1
@@ -98,14 +96,17 @@ _VARIABLE_SCORE = 10
 
 log = logging.getLogger(__name__)
 
+
 class StopScanLoop(StopIteration):
     pass
 
+
 class Token(object):
-    """ Parent class of all the types of token that can be found by the parser. 
+    """ Parent class of all the types of token that can be found by the parser.
     The only thing this does is make isinstance(obj, Token) work.
     """
     pass
+
 
 class Wild(Token):
     """ Parse and represent wildcards. Instance variables:
@@ -117,9 +118,10 @@ class Wild(Token):
         as a string.
     """
     regexc = re.compile(r".(\d*)(~?)(\d*)", re.UNICODE)
-    wildcards = {"@" : r"[^_\d\W]+",
-                 "#" : r"\d+",
-                 "*" : r"\w+"}
+    wildcards = {"@": r"[^_\d\W]+",
+                 "#": r"\d+",
+                 "*": r"\w+"}
+
     def __init__(self, tokens, text, terminator):
         self.wild = text[0]
         self.minimum = "1"
@@ -129,7 +131,7 @@ class Wild(Token):
         groups = m.groups()
         if groups[0]:
             self.minimum = self.maximum = groups[0]
-        if groups[1]: #they gave us a ~
+        if groups[1]:  # they gave us a ~
             self.maximum = groups[2]
         self.minimum = text_type(max(int(self.minimum), 1))
         if self.maximum:
@@ -168,8 +170,9 @@ class Wild(Token):
             if max_str != "":
                 max_str = text_type(int(self.maximum) - 1)
             return (r"(" + wildcard + r"\s)" +
-                    r"{" + min_str + r"," + max_str + r"}?"
-                    + wildcard + r"\b")
+                    r"{" + min_str + r"," + max_str + r"}?" +
+                    wildcard + r"\b")
+
 
 class Word(Token):
     """ Parse and represent words. Instance variables:
@@ -180,12 +183,12 @@ class Word(Token):
         self.text = text
 
     def add_to_parsetree(self, parsetree):
-        #if the last two things are a word and a space, merge them
+        # if the last two things are a word and a space, merge them
         if (len(parsetree.contents) > 1 and
-            isinstance(parsetree.contents[-1], Space) and
-            isinstance(parsetree.contents[-2], Word)):
-                parsetree.contents[-2].text += (" " + self.text)
-                parsetree.contents.pop()
+                isinstance(parsetree.contents[-1], Space) and
+                isinstance(parsetree.contents[-2], Word)):
+            parsetree.contents[-2].text += (" " + self.text)
+            parsetree.contents.pop()
         else:
             parsetree.contents.append(self)
 
@@ -197,6 +200,7 @@ class Word(Token):
 
     def regex(self, variables, counter):
         return self.text + r"\b"
+
 
 class Memo(Token):
     """ Parse and represent memorization. Instance variables:
@@ -219,6 +223,7 @@ class Memo(Token):
         return "(?P<match{0}>{1})".format(next(counter),
                                           self.item.regex(variables, counter))
 
+
 class Space(Token):
     """ Parse and represent whitespace.
     """
@@ -228,9 +233,9 @@ class Space(Token):
     def add_to_parsetree(self, parsetree):
         # leading spaces (for example within a group) are ignored,
         # as are multiple spaces in a row
-        if (parsetree.contents
-            and isinstance(parsetree.contents[-1], Token)
-            and not isinstance(parsetree.contents[-1], Space)):
+        if (parsetree.contents and
+                isinstance(parsetree.contents[-1], Token) and
+                not isinstance(parsetree.contents[-1], Space)):
             parsetree.contents.append(self)
 
     def format(self):
@@ -241,6 +246,7 @@ class Space(Token):
 
     def regex(self, variables, counter):
         return r"\s?"
+
 
 class Variable(Token):
     """ Parse and represent variables. Instance variables:
@@ -263,10 +269,10 @@ class Variable(Token):
 
     def regex(self, variables, counter):
         if (self.var_id not in variables or
-            self.var_name not in variables[self.var_id]):
+                self.var_name not in variables[self.var_id]):
             raise PatternVariableNotFoundError(
                 "Chatbot variable %{0}:{1} is undefined".format(self.var_id,
-                                                             self.var_name))
+                                                                self.var_name))
         value = variables[self.var_id][self.var_name]
         if not isinstance(value, text_type):
             raise PatternVariableValueError(
@@ -283,6 +289,7 @@ class Variable(Token):
             raise
 
         return regex + r"\b"
+
 
 class Optional(Token):
     """ Parse and represent optional parts of a pattern. Instance variables:
@@ -307,6 +314,7 @@ class Optional(Token):
                   for chunk in self.choices.contents]
         return "(" + "|".join(output) + ")?"
 
+
 class Group(Token):
     """ Parse and represent alternative parts of a pattern. Instance variables:
     choices - a ParseTree containing ParseTrees, one for each sub-pattern
@@ -330,6 +338,7 @@ class Group(Token):
                   for chunk in self.choices.contents]
         return "(" + "|".join(output) + ")"
 
+
 class Terminator(Token):
     """ Parse the terminator characters ) and ]
     """
@@ -341,6 +350,7 @@ class Terminator(Token):
         parsetree.remove_trailing_space()
         parsetree.group_tokens()
         raise StopScanLoop
+
 
 class Pipe(Token):
     """ Parse the separator character |
@@ -355,13 +365,15 @@ class Pipe(Token):
         parsetree.remove_trailing_space()
         parsetree.group_tokens()
 
+
 class Invalid(Token):
-    """ Throw a PatternError, used when the tokenizer finds an unknown 
+    """ Throw a PatternError, used when the tokenizer finds an unknown
     character.
     """
     def __init__(self, tokens, text, terminator):
         raise PatternError("Found an unexpected character {0}".format(text))
-        
+
+
 class PatternTokenizer(object):
     """ Pattern Tokenizer class for simplified regular expression patterns.
     The class instance has no public instance variables, but builds and contains
@@ -370,9 +382,9 @@ class PatternTokenizer(object):
 
     Public instance method:
     tokens - return a generator which will yield (token_subclass, match_text)
-             for each token substring found 
+             for each token substring found
     """
-    
+
     def __init__(self, simple=False):
         """ Build and re.compile the machinery that makes PatternParser work.
         if simple is True, limit the tokens that will be matched to Word,
@@ -415,9 +427,9 @@ class PatternTokenizer(object):
                 self._token_classes.append(token_class)
                 if lookahead:
                     self._token_classes.append(None)
-                
+
         self._regexc = re.compile("|".join(regexes), re.UNICODE)
-            
+
     def tokens(self, string):
         """ Returns a generator expression which will yield (token_class, text)
         for each matching regular expression that it finds in the string.
@@ -440,13 +452,13 @@ class PatternTokenizer(object):
 class ParsedPattern(object):
     pp = PatternTokenizer(simple=False)
     pp_simple = PatternTokenizer(simple=True)
-    
+
     def __init__(self, *args, **kwargs):
         """ Construct a ParsedPattern object. Since ParsedPattern objects can
         contain other ParsedPattern objects, this can be called recursively,
         therefore it needs to do different things depending on how it is called.
 
-        The external entry point, to create a new ParsedPattern from a 
+        The external entry point, to create a new ParsedPattern from a
         pattern string:
             pp = ParsedPattern(pattern)
 
@@ -455,7 +467,7 @@ class ParsedPattern(object):
 
         The following variations are used during the recursion process:
             To create an empty ParsedPattern:
-                pp = ParsedPattern() 
+                pp = ParsedPattern()
 
             To create a new ParsedPattern and fill with a list of tokens:
                 pp = ParsedPattern(token_list)
@@ -463,7 +475,7 @@ class ParsedPattern(object):
             To create a new ParsedPattern from a token generator expression
                 pp = ParsedPattern(token_gen, just_one=False, terminator=None)
 
-                In this last version, setting just_one to True causes it to 
+                In this last version, setting just_one to True causes it to
                 parse just one token and then return. Setting terminator to ")"
                 or "]" causes it to return when it encounters that character.
 
@@ -478,7 +490,7 @@ class ParsedPattern(object):
         elif isinstance(args[0], list):
             self.contents.extend(args[0])
         else:
-            if isinstance(args[0], text_type): 
+            if isinstance(args[0], text_type):
                 simple = kwargs.pop("simple", False)
                 pattern = args[0]
                 pattern = pattern.lower()
@@ -506,7 +518,7 @@ class ParsedPattern(object):
             except StopScanLoop:
                 pass
             except StopIteration:
-                if terminator != None:
+                if terminator is not None:
                     raise PatternError("Missing a closing parenthesis "
                                        "or square bracket")
             self.remove_trailing_space()
@@ -517,7 +529,7 @@ class ParsedPattern(object):
             raise TypeError("Unexpected **kwargs: {0}".format(repr(kwargs)))
 
     def format(self):
-        """Reconstruct the pattern string. Spacing will 
+        """Reconstruct the pattern string. Spacing will
         be normalized, so you could use this to compare two patterns with
         inconsistent whitespace.
         """
@@ -531,10 +543,10 @@ class ParsedPattern(object):
         return sum(token.score() for token in self.contents)
 
     def regex(self, variables, counter=None):
-        """ Generate a regular expression from the parsed pattern, 
+        """ Generate a regular expression from the parsed pattern,
         substituting in variable values if given.
 
-        variables - a dictionary of dictionaries. The keys to the outer 
+        variables - a dictionary of dictionaries. The keys to the outer
             dictionary are the single characters between % and :
             in the pattern. The keys to the inner dictionaries
             are variable names, and since case is ignored only
@@ -547,7 +559,7 @@ class ParsedPattern(object):
             counting at zero.
 
         May raise:
-        PatternVariableNotFoundError if a variable is referenced which is 
+        PatternVariableNotFoundError if a variable is referenced which is
             not in the dictionary
         PatternVariableValueError if a variable contains something other
             than a unicode string
@@ -573,7 +585,6 @@ class ParsedPattern(object):
             self.contents.pop()
 
 
- 
 class Pattern(object):
 
     def __init__(self, raw, alternates=None, simple=False):
@@ -619,7 +630,7 @@ class Pattern(object):
             try:
                 regex = self.regex(allvars)
             except PatternVariableNotFoundError as e:
-                log.debug( e.args[0] +
+                log.debug(e.args[0] +
                           ' in "{0}"'.format(self.formatted_pattern) +
                           ", match failed")
                 return None
@@ -627,6 +638,5 @@ class Pattern(object):
         if m is not None:
             log.debug(self.formatted_pattern +
                       '" matched "' + string + '"')
-                     
+
         return m
-            

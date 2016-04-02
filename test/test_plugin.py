@@ -15,7 +15,7 @@ from unittest import TestCase
 from mock import patch, Mock, MagicMock
 from threading import Thread
 
-_VERSION = "0.2"
+_VERSION = "0.3.0"
 
 sys.path.append(os.path.abspath('../Chatbot.indigoPlugin/Contents/Server Plugin'))
 
@@ -57,6 +57,7 @@ class IndigoMockTestCase(TestCase):
 
         modules = sys.modules.copy()
         modules["indigo"] = self.indigo_mock
+        modules["appscript"] = MagicMock()
         self.module_patcher = patch.dict("sys.modules", modules)
         self.module_patcher.start()
         import plugin
@@ -89,7 +90,7 @@ class PluginTestCase(IndigoMockTestCase):
         # why this fixed it is a mystery to me
         props = {"showDebugInfo" : False,
                  "scriptsPath": path}
-        plugin = self.plugin_module.Plugin("", "", "0.2", props)
+        plugin = self.plugin_module.Plugin("", "", _VERSION, props)
         plugin.startup()
         return plugin
 
@@ -138,6 +139,22 @@ class PluginTestCase(IndigoMockTestCase):
         self.assertEqual(self.plugin.debugLog.call_count, 3)
         self.assertFalse(self.plugin.debug)
         self.assertFalse(PluginBaseForTest.errorLog.called)
+
+    def test_EngineDebugMenuItem_Toggles(self):
+        self.plugin.debug_engine = False
+        self.plugin.debugLog.reset_mock()
+        self.plugin.toggleEngineDebugging()
+        self.assertEqual(self.plugin.debugLog.call_count, 1)
+        self.assertTrue(self.plugin.debug_engine)
+
+        self.plugin.toggleEngineDebugging()
+        self.assertEqual(self.plugin.debugLog.call_count, 2)
+        self.assertFalse(self.plugin.debug_engine)
+        self.assertFalse(self.plugin.errorLog.called)
+
+    def test_ReloadScriptsMenuItem_Succeeds(self):
+        self.plugin.reloadScripts()
+        self.assertFalse(self.plugin.errorLog.called)
 
     def test_PreferencesUIValidation_Succeeds(self):
         values = {"showDebugInfo" : True, "scriptsPath":"./test_scripts"}
@@ -313,6 +330,47 @@ class PluginTestCase(IndigoMockTestCase):
         if tag:
             self.assertTrue(tag in errs)
             self.assertTrue(errs[tag])
+
+    def test_Chatter_RequestsName_BeforeCallingBot(self):
+        chatter = self.plugin_module.Chatter(self.plugin.bot)
+        self.plugin.bot.reply = Mock()
+        flag = chatter.push("Hello")
+        self.assertFalse(flag)
+        self.assertFalse(self.plugin.bot.reply.called)
+
+        chatter.push("/name Barb")
+        chatter.push("Hello")
+        self.assertFalse(self.plugin.bot.reply.called)
+
+        chatter.push("/new")
+        chatter.push("Hello")
+        self.assertFalse(self.plugin.bot.reply.called)
+
+        chatter.push("/Barb")
+        chatter.push("Hello")
+        self.assertFalse(self.plugin.bot.reply.called)
+
+    def test_Chatter_CallsBot_WhenItKnowsName(self):
+        chatter = self.plugin_module.Chatter(self.plugin.bot)
+        self.plugin.bot.reply = Mock(return_value="")
+        chatter.push("/new Barb")
+        chatter.push("Hello")
+        self.assertTrue(self.plugin.bot.reply.called)
+
+        chatter.push("/names")
+        chatter.push("/name Barb")
+        chatter.push("Goodbye")
+        self.assertEqual(self.plugin.bot.reply.call_count, 2)
+
+    def test_StartInteractiveInterpreterMenuItem_Succeeds(self):
+        with patch("plugin.start_shell_thread") as p:
+            self.plugin.startInteractiveInterpreter()
+            self.assertTrue(p.called)
+
+    def test_StartInteractiveChatbotMenuItem_Succeeds(self):
+        with patch("plugin.start_interaction_thread") as p:
+            self.plugin.startInteractiveChat()
+            self.assertTrue(p.called)
 
 
 if __name__ == "__main__":

@@ -20,11 +20,12 @@ from chatbot_reply.script import Script, ScriptRegistrar
 
 log = logging.getLogger(__name__)
 
+
 class RulesDB(object):
-    """ Rules Database object. Reads directories of python files, and 
+    """ Rules Database object. Reads directories of python files, and
     instantiates any subclasses of Script found therein and stores rules,
-    patterns and methods in Topic objects. 
-   
+    patterns and methods in Topic objects.
+
     Public methods --
     load_script_directory: Load python files from a directory into the
         database
@@ -49,36 +50,56 @@ class RulesDB(object):
     def _new_topic(self, topic):
         """ Add a new topic to the rules database. """
         self.topics[topic] = Topic()
- 
-    def load_script_directory(self, directory, botvars):
+
+    def load_script_directory(self, directory, botvars, ignore_errors):
         """Iterate through the .py files in a directory, and import all of
         them. Then look for subclasses of Script and search them for
         rules, and load those into self.topics.
         botvars is a dictionary that loaded scripts can use to initialize
         chatbot state
 
+        if ignore_errors is True, try to load as much as possible. Errors and
+        tracebacks will be logged. It's un-Pythonic, but the idea is to keep
+        one broken file from killing the entire chatbot.
+
         """
+        def call_handling_exceptions(func, *args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except:
+                if ignore_errors:
+                    log.error("Error loading scripts, "
+                              "attempting to continue", exc_info=True)
+                    return None
+                else:
+                    raise
+
         self.rules_sorted = False
         ScriptRegistrar.clear()
-        
-        for item in os.listdir(directory):
-            if item.lower().endswith(".py"):
-                log.debug("Importing " + item)
-                filename = os.path.join(directory, item)
-                self._import(filename)
+
+        files = call_handling_exceptions(os.listdir, directory)
+        if files is not None:
+            for item in files:
+                if item.lower().endswith(".py"):
+                    log.debug("Importing " + item)
+                    filename = os.path.join(directory, item)
+                    call_handling_exceptions(self._import, filename)
 
         for cls in ScriptRegistrar.registry:
             log.debug("Loading scripts from " + cls.__name__)
-            self._add_to_rulesdb(cls, botvars)
+            call_handling_exceptions(self._add_to_rulesdb, cls, botvars)
 
         if sum([len(t.rules) for k, t in self.topics.items()]) == 0:
-            raise NoRulesFoundError(
-                "No rules were found in {0}/*.py".format(directory))
-                
+            msg = "No rules were found in {0}/*.py".format(directory)
+            if ignore_errors:
+                log.error(msg)
+            else:
+                raise NoRulesFoundError(msg)
+
     def _import(self, filename):
         """Import a python module, given the filename, but to avoid creating
         namespace conflicts give the module a name consisting of
-        _PREFIX + filename (minus any extension). 
+        _PREFIX + filename (minus any extension).
         """
         global _PREFIX
         path, name = os.path.split(filename)
@@ -99,7 +120,7 @@ class RulesDB(object):
         """
         instance = script_class()
         topic = instance.topic
-        if topic == None: #this is the way to define a script superclass
+        if topic is None:  # this is the way to define a script superclass
             return
         if topic not in self.topics:
             self._new_topic(topic)
@@ -107,7 +128,7 @@ class RulesDB(object):
         instance.botvars = botvars
         instance.setup()
         self.script_instances.append(instance)
-        
+
         rules, substitutions = self._load_script_methods(instance)
         self.topics[topic].add_rules(rules)
         self.topics[topic].add_substitutions(substitutions)
@@ -139,7 +160,7 @@ class RulesDB(object):
                                               instance, attribute)
                 substitutes.append(sub)
         return rules, substitutes
-   
+
     def _parse_alternates(self, alternates, script_class_name):
         """Construct Pattern objects for all the values in the alternates
         instance variable (hopefully a dictionary) of a Script
@@ -161,12 +182,12 @@ class RulesDB(object):
             msg += " of {0}".format(script_class_name)
             e.args = (e.args[0] + msg,) + e.args[1:]
             raise
-        return {"a":valid}
+        return {"a": valid}
 
     def _load_rule(self, script_class_name, instance, attribute,
-                      alternates):
+                   alternates):
         """ Given an instance of a class derived from Script and
-        a callable attribute, check that it is declared correctly, 
+        a callable attribute, check that it is declared correctly,
         and then construct and return a Rule object.
         """
         method = getattr(instance, attribute)
@@ -180,8 +201,8 @@ class RulesDB(object):
 
     def _load_substitution(self, script_class_name, instance, attribute):
         """ Given an instance of a class derived from Script and
-        a callable attribute, check that it is declared correctly, 
-        and then return it as a tuple with its full name 
+        a callable attribute, check that it is declared correctly,
+        and then return it as a tuple with its full name
         """
         name = script_class_name + "." + attribute
         method = getattr(instance, attribute)
@@ -205,7 +226,7 @@ class RulesDB(object):
             log.debug("Topic: {0}".format(n))
             t.log_sorted_rules()
         log.debug("-"*52)
-    
+
 
 def get_rule_method_spec(name, method):
     """ Check that the passed argument spec matches what we expect the
@@ -219,12 +240,12 @@ def get_rule_method_spec(name, method):
                 name))
     argspec = inspect.getargspec(method)
     if (len(argspec.args) != 4 or
-        " ".join(argspec.args) != "self pattern previous_reply weight" or
-        argspec.varargs is not None or
-        argspec.keywords is not None or
-        len(argspec.defaults) != 3):
+            " ".join(argspec.args) != "self pattern previous_reply weight" or
+            argspec.varargs is not None or
+            argspec.keywords is not None or
+            len(argspec.defaults) != 3):
         raise TypeError("{0} was not decorated by @rule "
-                 "or it has the wrong number of arguments.".format(name))
+                        "or it has the wrong number of arguments.".format(name))
     return argspec
 
 
@@ -239,17 +260,16 @@ def check_substitution_method_spec(name, method):
             "{0} begins with 'substitute' but is not callable.".format(
                 name))
     argspec = inspect.getargspec(method)
-    if (len(argspec.args) != 3 or
-        argspec.varargs is not None or
-        argspec.keywords is not None):
+    if (len(argspec.args) != 3 or argspec.varargs is not None or
+            argspec.keywords is not None):
         raise TypeError("{0} was not decorated by @rule "
-                 "or it has the wrong number of arguments.".format(name))
+                        "or it has the wrong number of arguments.".format(name))
     return argspec
-    
+
 
 class Topic(object):
     """ Topic object. Stores Rule objects and references to substitution
-    methods for each topic. 
+    methods for each topic.
     Public instance variables:
         rules : dictionary of Rule objects, indexed by tuples containing
                 the two formatted pattern strings of the rule
@@ -277,13 +297,15 @@ class Topic(object):
             if tup in self.rules:
                 existing_rule = self.rules[tup]
                 log.warning("Ignoring rule {0} because its patterns are "
-                          "duplicates of the patterns of the rule "
-                          "{1} ".format(rule.rulename, existing_rule.rulename))
+                            "duplicates of the patterns of the rule "
+                            "{1} ".format(
+                                rule.rulename, existing_rule.rulename))
             else:
                 self.rules[tup] = rule
-                log.debug('Loaded pattern "{0[0]}", previous="{0[1]}", ' 
+                log.debug('Loaded pattern "{0[0]}", previous="{0[1]}", '
                           'weight={1}, method={2}'.format(tup, rule.weight,
-                                                           rule.rulename))
+                                                          rule.rulename))
+
     def add_substitutions(self, substitutions):
         """ Add substitution methods to the substitutions list """
         self.substitutions.extend(substitutions)
@@ -301,8 +323,8 @@ class Topic(object):
             log.debug('({2}) "{0}"/"{1}"'.format(
                 r.pattern.formatted_pattern,
                 r.previous.formatted_pattern, r.weight))
-        
-        
+
+
 class Rule(object):
     """ Pattern matching and response rule.
 
@@ -321,7 +343,7 @@ class Rule(object):
     Public methods:
     match - given current message and reply history, return a Match
             object if the patterns match or None if they don't
-    full set of comparison operators - to enable sorting first by weight then 
+    full set of comparison operators - to enable sorting first by weight then
             score of the two patterns
     """
     def __init__(self, raw_pattern, raw_previous, weight, alternates,
@@ -337,7 +359,7 @@ class Rule(object):
         rulename - modulename.classname.methodname, used to make better
                  error messages
 
-        Raises PatternError, PatternVariableNotFoundError, 
+        Raises PatternError, PatternVariableNotFoundError,
                PatternVariableValueError
         """
         try:
@@ -347,8 +369,8 @@ class Rule(object):
             self.pattern = Pattern(raw_pattern, alternates)
             previous = "previous "
             self.previous = Pattern(raw_previous, alternates)
-        except (TypeError, PatternError, PatternVariableValueError,\
-               PatternVariableNotFoundError) as e: 
+        except (TypeError, PatternError, PatternVariableValueError,
+                PatternVariableNotFoundError) as e:
             msg = " in {0}pattern of {1}".format(previous, rulename)
             e.args = (e.args[0] + msg,) + e.args[1:]
             raise
@@ -387,26 +409,27 @@ class Rule(object):
         is the most significant, followed by the complexity of the pattern
         and the complexity of the previous pattern.
         """
-        return (self.weight < other.weight
-                or
-                (self.weight == other.weight
-                 and self.pattern.score < other.pattern.score)
-                or
-                (self.weight == other.weight
-                 and self.pattern.score == other.pattern.score
-                 and self.previous.score < other.previous.score))
-                
+        return (self.weight < other.weight or
+                (self.weight == other.weight and
+                 self.pattern.score < other.pattern.score) or
+                (self.weight == other.weight and
+                 self.pattern.score == other.pattern.score and
+                 self.previous.score < other.previous.score))
+
     def __eq__(self, other):
-        return (self.weight == other.weight
-                and self.pattern.score == other.pattern.score
-                and self.previous.score == other.previous.score)
+        return (self.weight == other.weight and
+                self.pattern.score == other.pattern.score and
+                self.previous.score == other.previous.score)
 
     def __gt__(self, other):
         return not (self == other or self < other)
+
     def __le__(self, other):
         return self < other or self == other
+
     def __ge__(self, other):
         return self > other or self == other
+
     def __ne__(self, other):
         return not self == other
 
@@ -420,20 +443,21 @@ class Match(object):
         dict -- dictionary of matched text
 
     The dictionary keys will be:
-    match0..matchN         -- memorized matches in the tokenized text of 
+    match0..matchN         -- memorized matches in the tokenized text of
                               the message
-    reply_match0...reply_matchN  -- matches in the previous reply's tokenized text
+    reply_match0...reply_matchN  -- matches in the previous reply's tokenized
+                              text
     raw_match0..rawN       -- memorized matches of the untokenized text of the
-                              message, all capitals and punctuation included, 
+                              message, all capitals and punctuation included,
                               but whitespace normalized.
-    reply_raw_match0 -- reply_rawmatchN -- memorized matches of the untokenized 
+    reply_raw_match0 -- reply_rawmatchN -- memorized matches of the untokenized
                               text of the previous reply
     """
     def __init__(self, m_pattern, m_previous, target, previous_target):
         """ Construct a Match object given two regular expression match objects,
         which if constructed by ParsedPattern will have populated the groupdict
-        with keys match0, match1, ... matchN, as well as the Target objects 
-        they were matched to. 
+        with keys match0, match1, ... matchN, as well as the Target objects
+        they were matched to.
         """
         self.dict = {}
         self._add_matches(m_pattern, target, "")
@@ -441,7 +465,7 @@ class Match(object):
             self._add_matches(m_previous, previous_target, "reply_")
 
     def _add_matches(self, m, target, prefix):
-        """ Prefix all keys from m.groupdict() with the prefix argument, and 
+        """ Prefix all keys from m.groupdict() with the prefix argument, and
         add them to self.dict. Then use the fact that the tokenized_words and
         raw_words lists in target are the same length to find the chunk of raw
         text that each match corresponds to, and add those to the dictionary
@@ -457,7 +481,7 @@ class Match(object):
         for wl in target.tokenized_words:
             offsets.append(offset)
             offset += len(" ".join(wl)) + 1
-            
+
         for k, v in m.groupdict().items():
             self.dict[prefix + k] = v
             start, end = m.span(k)
