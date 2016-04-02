@@ -100,9 +100,8 @@ class Plugin(indigo.PluginBase):
             handler.setFormatter(logging.Formatter(prefix + "%(message)s"))
             return handler
 
-        if not logger.handlers:
-            logger.addHandler(make_handler(self.debugLog, self.errorLog,
-                                           prefix))
+        logger.addHandler(make_handler(self.debugLog, self.errorLog,
+                                       prefix))
         logger.setLevel(level)
         if propagate is not None:
             logger.propagate = propagate
