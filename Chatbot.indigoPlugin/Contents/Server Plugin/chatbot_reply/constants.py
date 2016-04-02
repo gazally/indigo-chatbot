@@ -6,6 +6,5 @@
 """Chatbot Reply Generator, constants
 
 """
-_PREFIX = "___" # added to script module names to avoid namespace conflicts
-_HISTORY = 10   # number of previous messages/replies to keep
-
+_PREFIX = "___"  # added to script module names to avoid namespace conflicts
+_HISTORY = 10    # number of previous messages/replies to keep

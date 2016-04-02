@@ -19,11 +19,12 @@ from chatbot_reply.script import Script, UserInfo
 from chatbot_reply.script import kill_non_alphanumerics, split_on_whitespace
 from chatbot_reply.exceptions import *
 
-#todo use imp thread locking, though this thing is totally not thread-safe
-#should case sensitivity be an option?
-#If we decide to rerun setup methods, need to reparse alternates
+# todo use imp thread locking, though this thing is totally not thread-safe
+# should case sensitivity be an option?
+# If we decide to rerun setup methods, need to reparse alternates
 
 log = logging.getLogger(__name__)
+
 
 class ChatbotEngine(object):
     """ Python Chatbot Reply Generator
@@ -31,7 +32,7 @@ class ChatbotEngine(object):
     Loads pattern/reply rules, using a simplified regular expression grammar
     for the patterns, and decorated Python methods for the rules. Maintains
     rules, a variable dictionary for the chatbot's internal state plus one
-    for each user conversing with the chatbot. Matches user input to its 
+    for each user conversing with the chatbot. Matches user input to its
     database of patterns to select a reply rule, which may recursively reference
     other reply patterns and rules.
 
@@ -45,16 +46,16 @@ class ChatbotEngine(object):
     def __init__(self, depth=50):
         """Initialize a new ChatbotEngine.
 
-        Keyword argument: 
-        depth -- Recursion depth limit for replies that reference other replies 
+        Keyword argument:
+        depth -- Recursion depth limit for replies that reference other replies
         """
         self._depth_limit = depth
 
         self._botvars = {}
-        self._variables = {"b" : self._botvars,
-                           "u" : None}
-        
-        self._users = {} # will contain UserInfo objects
+        self._variables = {"b": self._botvars,
+                           "u": None}
+
+        self._users = {}  # will contain UserInfo objects
         log.debug("Chatbot instance created.")
         self.clear_rules()
 
@@ -63,15 +64,14 @@ class ChatbotEngine(object):
         log.debug("Rules database cleared")
         self.rules_db = RulesDB()
 
-    def load_script_directory(self, directory):
+    def load_script_directory(self, directory, ignore_errors=False):
         """ Load rules from *.py in a directory """
-        self.rules_db.load_script_directory(directory, self._botvars)
+        self.rules_db.load_script_directory(directory, self._botvars,
+                                            ignore_errors)
 
-    ##### Reading scripts and building the database of rules #####
-    
     def reply(self, user, user_dict, message):
         """ For the current topic, find the best matching rule for the message.
-        Recurse as necessary if the first rule returns references to other 
+        Recurse as necessary if the first rule returns references to other
         rules. This method does setup and cleanup and passes the actual work
         to self._reply()
 
@@ -91,7 +91,7 @@ class ChatbotEngine(object):
             raise TypeError("message argument must be string, not bytestring")
 
         self.rules_db.sort_rules()
-        
+
         log.debug('Asked to reply to: "{0}" from {1}'.format(message, user))
         self._setup_user(user, user_dict)
 
@@ -109,14 +109,14 @@ class ChatbotEngine(object):
         """ Recursively construct replies """
         if depth > self._depth_limit:
             raise RecursionTooDeepError
-        
+
         log.debug('Searching for rule matching "{0}", depth == {1}'.format(
             message, depth))
         userinfo = self._users[user]
         topic = userinfo.topic_name
         target = Target(message, self.rules_db.topics[topic].substitutions)
         reply = ""
-        
+
         for rule in self.rules_db.topics[topic].sortedrules:
             m = rule.match(target, userinfo.repl_history,
                            self._variables)
@@ -135,7 +135,7 @@ class ChatbotEngine(object):
 
     def _reply_from_rule(self, rule, rule_match, userinfo):
         """ Given a rule and the results from a successful match of the rule's
-        pattern, call the rule method and return the results. 
+        pattern, call the rule method and return the results.
         """
         log.debug("Found match, rule {0}".format(rule.rulename))
 
@@ -164,16 +164,17 @@ class ChatbotEngine(object):
         zipper.reverse()
         for m, sub_reply in zipper:
             reply = reply[:m.start()] + sub_reply + reply[m.end():]
-        return reply    
+        return reply
 
     def _check_for_topic_change(self, user, rule, old_topic, new_topic):
         """ Given a rule, and the topic set before and after its execution,
-        make sure the change is legit and do appropriate debug logging. 
+        make sure the change is legit and do appropriate debug logging.
         """
         if old_topic != new_topic:
             if new_topic not in self.rules_db.topics:
                 log.warning("Rule {0} changed to empty topic {1}, "
-                          "returning to 'all'".format(rule.rulename, new_topic))
+                            "returning to 'all'".format(
+                                rule.rulename, new_topic))
                 new_topic = "all"
             log.debug("User {0} now in topic {1}".format(user, new_topic))
 
@@ -188,12 +189,14 @@ class ChatbotEngine(object):
         new = (user not in self._users)
         if new:
             self._users[user] = UserInfo(user_dict)
+        else:
+            self._users[user].info.update(user_dict)
 
         self._variables["u"] = self._users[user].vars
         topic = self._users[user].topic_name
         if topic not in self.rules_db.topics:
             log.warning("User {0} is in empty topic {1}, "
-                      "returning to 'all'".format(user, topic))
+                        "returning to 'all'".format(user, topic))
             topic = self._users[user].topic_name = "all"
 
         if new:
@@ -201,7 +204,7 @@ class ChatbotEngine(object):
             for inst in self.rules_db.script_instances:
                 inst.userinfo = self._users[user]
                 inst.setup_user(user)
-            
+
     def _remember(self, user, message, reply):
         """ Save recent messages and replies, per user """
         user_info = self._users[user]
@@ -209,8 +212,8 @@ class ChatbotEngine(object):
         user_info.msg_history.appendleft(message)
         user_info.repl_history.appendleft(
             Target(reply, self.rules_db.topics[topic_name].substitutions))
-        
-    
+
+
 class Target(object):
     """ A message prepared to be a match target.
 
@@ -218,7 +221,7 @@ class Target(object):
     raw_text: the string passed to the constructor
     raw_words: a list of words of the same string, split on whitespace
     tokenized_words: a list of lists, one for each word in orig_words
-        after doing substitutions (see below), making them lower case, 
+        after doing substitutions (see below), making them lower case,
         and removing all remaining non-alphanumeric characters.
     normalized: tokenized_words, joined back together by single spaces
 
@@ -250,7 +253,7 @@ class Target(object):
                        [["wazzup"], [[""]])
                        "wazzup"
 
-        Substitutor methods may change the number of words in the sublists of 
+        Substitutor methods may change the number of words in the sublists of
         tokenized_words, but they should not change the number of sublists in
         tokenized_words, or a TypeError will be raised.
 
@@ -261,7 +264,7 @@ class Target(object):
                               "i am tired today"
 
         The reason for the nested lists in tokenized_words is so that the code
-        which generates matches can map text matched  in the normalized 
+        which generates matches can map text matched  in the normalized
         string back to the original string, so for example if you match
         "I'm tired today!" to the pattern "i am tired _*", the match dict
         entry for "raw_match0" will contain "today!"
@@ -271,7 +274,7 @@ class Target(object):
         sub_words = self._do_substitutions(substitutions)
 
         self.tokenized_words = [[kill_non_alphanumerics(word.lower())
-                        for word in wl] for wl in sub_words]
+                                 for word in wl] for wl in sub_words]
         self.normalized = " ".join(
                                 [" ".join(wl) for wl in self.tokenized_words])
         log.debug('Normalized message to "{0}"'.format(self.normalized))
@@ -296,5 +299,5 @@ class Target(object):
                 msg = (" in{0} {1}".format(clearer_error_message, name))
                 e.args = (e.args[0] + msg,) + e.args[1:]
                 raise
-                
+
         return results
