@@ -10,15 +10,17 @@ from __future__ import unicode_literals
 
 from distutils.version import StrictVersion
 import logging
-
+import traceback
 import indigo
 
 from chatbot_reply import ChatbotEngine, NoRulesFoundError
+from termapp_server import start_interaction_thread, start_shell_thread
 
 _VERSION = "0.2"
 _SENDER_INFO_FIELDS = ["info1", "info2", "info3"]
 
-log = logging.getLogger()
+log = logging.getLogger(__name__)
+
 
 class Plugin(indigo.PluginBase):
     """Chatbot plugin class for IndigoServer"""
@@ -66,12 +68,22 @@ class Plugin(indigo.PluginBase):
     # ----- Logging Configuration ----- #
 
     def configure_logging(self):
+        """ Set up the logging for this module and chatbot_reply. """
+        self.configure_logger(log)
+        self.configure_logger(logging.getLogger("chatbot_reply"),
+                              prefix="Engine")
+        self.configure_logger(logging.getLogger("termapp_server"),
+                              prefix="Console")
+        self.set_chatbot_logging()
+
+    def configure_logger(self, logger, level=logging.DEBUG, prefix="",
+                         propagate=False):
         """ Create a Handler subclass for the logging module that uses the
         logging methods supplied to the plugin by Indigo. Use it for both
         the plugin and the chatbot_reply module, and add a little formatting
         to chatbot_reply's logger to distinguish the two in the log.
         """
-        def make_logging_handler(debugLog, errorLog):
+        def make_handler(debugLog, errorLog, prefix=""):
             class NewHandler(logging.Handler):
                 def emit(self, record):
                     try:
@@ -82,19 +94,18 @@ class Plugin(indigo.PluginBase):
                             errorLog(msg)
                     except Exception:
                         self.handleError(record)
-            return NewHandler()
+            handler = NewHandler()
+            if prefix:
+                prefix = "[" + prefix + "]"
+            handler.setFormatter(logging.Formatter(prefix + "%(message)s"))
+            return handler
 
-        h = make_logging_handler(self.debugLog, self.errorLog)
-        log.addHandler(h)
-        log.setLevel(logging.DEBUG)
-
-        chatbot_logger = logging.getLogger("chatbot_reply")
-        h_chatbot = make_logging_handler(self.debugLog, self.errorLog)
-        f = logging.Formatter("[Engine] %(message)s")
-        h_chatbot.setFormatter(f)
-        chatbot_logger.addHandler(h_chatbot)
-        chatbot_logger.propagate = False
-        self.set_chatbot_logging()
+        if not logger.handlers:
+            logger.addHandler(make_handler(self.debugLog, self.errorLog,
+                                           prefix))
+        logger.setLevel(level)
+        if propagate is not None:
+            logger.propagate = propagate
 
     def set_chatbot_logging(self):
         """ Set the logging level for the chatbot_reply module's logger """
@@ -174,10 +185,10 @@ class Plugin(indigo.PluginBase):
         if not values["name"]:
             errors["name"] = "Name of the message sender is required."
 
-        fields =  ["message", "name"]
+        fields = ["message", "name"]
         fields.extend(_SENDER_INFO_FIELDS)
         self.validate_substitution(values, errors, fields)
-                                  
+
         if errors:
             return (False, values, errors)
         else:
@@ -224,6 +235,23 @@ class Plugin(indigo.PluginBase):
             log.error("Can't load script files because the scripts "
                       "directory has not been set. See the Chatbot "
                       "Configure dialog.")
+
+    def startInteractiveInterpreter(self):
+        """ Called by the Indigo UI for the Start Interactive Interpreter
+        menu item.
+        """
+        log.debug("startInteractiveInterpreter called")
+        namespace = globals().copy()
+        namespace.update(locals())
+        start_shell_thread(namespace, "", "Chatbot Plugin")
+
+    def startInteractiveChat(self):
+        """ Called by the Indigo UI for the Start Interactive Chat
+        menu item.
+        """
+        log.debug("startInteractiveChat called")
+        start_interaction_thread(Chatter(self.bot).push,
+                                 Chatter.helpmessage, "Chat")
 
     # ----- Device Start and Stop methods  ----- #
 
@@ -286,7 +314,7 @@ class Plugin(indigo.PluginBase):
             return
         if ("actionVersion" in action.props and
                 StrictVersion(action.props["actionVersion"]) <
-                StrictVersion(_VERSION)):
+                StrictVersion("0.2.0")):
             log.error("Action was configured by a previous version of this "
                       "plugin. Please check and save the Action Settings.")
             return
@@ -341,6 +369,7 @@ class Plugin(indigo.PluginBase):
 
         """
         device = indigo.devices[action.deviceId]
+
         status = device.states["status"]
         if status != "Idle":
             device.updateStateOnServer("status", "Idle")
@@ -353,3 +382,49 @@ class Plugin(indigo.PluginBase):
             if device.states["status"] == "Ready":
                 return
         self.clear_device_state(device)
+
+
+class Chatter(object):
+    helpmessage = ("Use /name to tell me who you are or "
+                   "/names to see who I know already")
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.name = None
+
+    def push(self, message):
+        if message.startswith("/"):
+            self.do_command(message)
+        elif self.name is None:
+            print(self.helpmessage)
+        else:
+            print("Reply:  " + self.bot.reply(self.name, {"name": self.name},
+                                              message))
+        return False
+
+    def do_command(self, message):
+        words = message.split()
+        usernames = self.bot._users.keys()
+        if words[0] == "/names":
+            print("Here are the people I know: " + ", ".join(usernames))
+        elif words[0] == "/name" or words[0] == "/new":
+            if len(words) == 1:
+                print("Please follow {0} with your name or use /names "
+                      "and I will tell you who I know already".format(
+                          words[0]))
+            else:
+                name = " ".join(words[1:])
+                if name in usernames:
+                    self.name = name
+                    print("Hello {0}!".format(name))
+                    print("Here is what I know about you:")
+                    for k, v in self.bot._users[name].info.items():
+                        print("    {0}: {1}".format(k, v))
+                elif words[0] == "/name":
+                    print("I don't know you. Please use /new followed by "
+                          "your name to introduce yourself")
+                else:
+                    self.name = name
+                    print("Nice to meet you, {0}!".format(name))
+        else:
+            print(self.helpmessage)
