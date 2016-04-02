@@ -16,7 +16,7 @@ import indigo
 from chatbot_reply import ChatbotEngine, NoRulesFoundError
 from termapp_server import start_interaction_thread, start_shell_thread
 
-_VERSION = "0.2"
+_VERSION = "0.3.0"
 _SENDER_INFO_FIELDS = ["info1", "info2", "info3"]
 
 log = logging.getLogger(__name__)

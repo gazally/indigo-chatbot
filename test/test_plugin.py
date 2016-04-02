@@ -15,7 +15,7 @@ from unittest import TestCase
 from mock import patch, Mock, MagicMock
 from threading import Thread
 
-_VERSION = "0.2"
+_VERSION = "0.3.0"
 
 sys.path.append(os.path.abspath('../Chatbot.indigoPlugin/Contents/Server Plugin'))
 
@@ -155,7 +155,6 @@ class PluginTestCase(IndigoMockTestCase):
     def test_ReloadScriptsMenuItem_Succeeds(self):
         self.plugin.reloadScripts()
         self.assertFalse(self.plugin.errorLog.called)
-
 
     def test_PreferencesUIValidation_Succeeds(self):
         values = {"showDebugInfo" : True, "scriptsPath":"./test_scripts"}
@@ -372,7 +371,10 @@ class PluginTestCase(IndigoMockTestCase):
         with patch("plugin.start_interaction_thread") as p:
             self.plugin.startInteractiveChat()
             self.assertTrue(p.called)
+<<<<<<< HEAD
 
+=======
+>>>>>>> master
 
 
 if __name__ == "__main__":

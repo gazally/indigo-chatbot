@@ -33,7 +33,7 @@
       <Field id = "explanation1" type="label">
 	<Label>Variable and device substitution markup (%%v:VARIABLEID%% and  %%d:DEVICEID:STATEKEY%%) work in all the above fields.</Label>
       </Field>
-      <Field id="actionVersion" type="textfield" hidden="true" defaultValue="0.2">
+      <Field id="actionVersion" type="textfield" hidden="true" defaultValue="0.3.0">
 	<Label>Hidden action version</Label>
       </Field>
     </ConfigUI>
